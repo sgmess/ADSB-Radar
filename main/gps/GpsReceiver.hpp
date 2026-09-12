@@ -6,7 +6,12 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
+
+#include "BoardConfig.hpp"
+
+#if BOARD_HAS_USB_GPS
 #include "usb/cdc_acm_host.h"
+#endif
 
 #define GPS_STATUS_TEXT_LEN 24
 #define GPS_DETAIL_TEXT_LEN 72
@@ -39,10 +44,14 @@ typedef struct {
 /*
  * USB CDC NMEA GPS receiver.
  *
- * The Waveshare board exposes a USB-A host port. This class watches for a CDC
- * ACM GPS dongle, parses GGA/RMC sentences, and publishes a small status
- * snapshot for the radar and settings page. It does not own the radar centre;
- * RadarPositionProvider decides whether to use the GPS fix.
+ * On boards with a USB-A host port this class watches for a CDC ACM GPS dongle, parses GGA/RMC
+ * sentences, and publishes a small status snapshot for the radar and settings page. It does not
+ * own the radar centre; RadarPositionProvider decides whether to use the GPS fix.
+ *
+ * The ESP32-S3-Touch-AMOLED-1.43 has no USB-A port and no switchable VBUS, so BOARD_HAS_USB_GPS
+ * is 0 there and everything below the public API compiles away. The class is kept rather than
+ * removed so that callers, the settings model, and the status snapshot shape stay identical
+ * across boards; start() simply reports the feature as unavailable.
  */
 class GpsReceiver {
 public:
@@ -64,9 +73,11 @@ private:
     static constexpr int64_t FIX_STALE_MS = 60000;
 
     mutable SemaphoreHandle_t mutex = nullptr;
+    gps_snapshot_t state = {};
+
+#if BOARD_HAS_USB_GPS
     TaskHandle_t task_handle = nullptr;
     cdc_acm_dev_hdl_t cdc_dev = nullptr;
-    gps_snapshot_t state = {};
     char line[NMEA_LINE_MAX] = {};
     size_t line_len = 0;
 
@@ -129,4 +140,5 @@ private:
 
     /* Fill human-readable status strings based on timestamps and fix state. */
     static void fillComputedStatus(gps_snapshot_t *snapshot, int64_t now_ms);
+#endif // BOARD_HAS_USB_GPS
 };

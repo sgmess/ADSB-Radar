@@ -11,7 +11,8 @@ class RadarApp;
 /*
  * WiFi state machine for the hosted ESP32-C6 WiFi module.
  *
- * The ESP32-P4 talks to the WiFi coprocessor through ESP Hosted over SDIO.
+ * The ESP32-S3 has a native radio, so this drives esp_wifi directly. (The ESP32-P4 build this
+ * was ported from reached the same API through ESP Hosted over SDIO to a co-processor.)
  * This manager keeps station setup, captive portal setup, credential storage,
  * scans, and recovery in one place so the radar and settings services can treat
  * WiFi as a small set of state transitions.

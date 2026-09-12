@@ -117,6 +117,20 @@ void set_error(char *error, size_t error_size, const char *text)
     }
 }
 
+/*
+ * Validate a physical-control pin assignment.
+ *
+ * RADAR_SETTINGS_GPIO_UNASSIGNED means "no pin wired", which is the default on this board and
+ * has to stay acceptable. Anything else must be a real GPIO on this target -- the ESP32-P4 build
+ * accepted up to 63, but an ESP32-S3 stops at 48 and configuring a number above that silently
+ * does nothing.
+ */
+static bool valid_control_gpio(int gpio)
+{
+    return gpio == RADAR_SETTINGS_GPIO_UNASSIGNED ||
+           (gpio >= 0 && gpio <= RADAR_SETTINGS_MAX_GPIO);
+}
+
 /* Validate that an API token buffer contains printable text and is terminated. */
 bool valid_api_token(const char *token, size_t token_size)
 {
@@ -654,7 +668,13 @@ void RadarSettings::setDefaults()
     show_countries = true;
     show_airport_runways = false;
     aircraft_data_source = AIRCRAFT_DATA_SOURCE_AIRPLANES_LIVE;
-    hardware_controls_enabled = true;
+    /*
+     * The ESP32-S3-Touch-AMOLED-1.43 breaks out very few GPIOs and reserves 47/48 for the I2C
+     * bus that the touch controller, IMU and RTC all share, so there is no pin set that can be
+     * defaulted safely. Physical controls therefore start off and unassigned; the browser
+     * admin's Hardware page is where a user with a wired encoder picks pins.
+     */
+    hardware_controls_enabled = false;
     hardware_rotary_action = RADAR_HW_ROTARY_RANGE;
     hardware_confirm_action = RADAR_HW_BUTTON_MENU_SELECT;
     hardware_back_action = RADAR_HW_BUTTON_BACK_CLOSE;
@@ -662,11 +682,11 @@ void RadarSettings::setDefaults()
     hardware_menu_timeout_sec = 15;
     hardware_show_hints = true;
     hardware_oled_i2c_addr = 0x3c;
-    hardware_confirm_gpio = 30;
-    hardware_back_gpio = 46;
-    hardware_rotary_a_gpio = 47;
-    hardware_rotary_b_gpio = 52;
-    hardware_rotary_push_gpio = 48;
+    hardware_confirm_gpio = RADAR_SETTINGS_GPIO_UNASSIGNED;
+    hardware_back_gpio = RADAR_SETTINGS_GPIO_UNASSIGNED;
+    hardware_rotary_a_gpio = RADAR_SETTINGS_GPIO_UNASSIGNED;
+    hardware_rotary_b_gpio = RADAR_SETTINGS_GPIO_UNASSIGNED;
+    hardware_rotary_push_gpio = RADAR_SETTINGS_GPIO_UNASSIGNED;
     snprintf(aircraft_local_url, sizeof(aircraft_local_url), "%s", "");
     set_default_colors(&colors);
     set_default_altitude_colors(&altitude_colors);
@@ -781,16 +801,11 @@ bool RadarSettings::isValid(const radar_settings_t &candidate)
         candidate.ground_speed_kt > RADAR_SETTINGS_MAX_GROUND_SPEED_KT ||
         candidate.hardware_oled_i2c_addr < 0x03 ||
         candidate.hardware_oled_i2c_addr > 0x77 ||
-        candidate.hardware_confirm_gpio < 0 ||
-        candidate.hardware_confirm_gpio > 63 ||
-        candidate.hardware_back_gpio < 0 ||
-        candidate.hardware_back_gpio > 63 ||
-        candidate.hardware_rotary_a_gpio < 0 ||
-        candidate.hardware_rotary_a_gpio > 63 ||
-        candidate.hardware_rotary_b_gpio < 0 ||
-        candidate.hardware_rotary_b_gpio > 63 ||
-        candidate.hardware_rotary_push_gpio < 0 ||
-        candidate.hardware_rotary_push_gpio > 63) {
+        !valid_control_gpio(candidate.hardware_confirm_gpio) ||
+        !valid_control_gpio(candidate.hardware_back_gpio) ||
+        !valid_control_gpio(candidate.hardware_rotary_a_gpio) ||
+        !valid_control_gpio(candidate.hardware_rotary_b_gpio) ||
+        !valid_control_gpio(candidate.hardware_rotary_push_gpio)) {
         return false;
     }
 
@@ -909,10 +924,17 @@ bool RadarSettings::parseJson(const char *json, radar_settings_t *candidate,
                                       RADAR_DISPLAY_TYPE_800_800_3_4_INCH :
                                       RADAR_DISPLAY_TYPE_720_720_4_INCH;
         }
+        /*
+         * "gps" is still accepted so a settings file exported from a board that has a USB host
+         * port imports cleanly, but it resolves to the manual centre here: BOARD_HAS_USB_GPS is
+         * 0, so selecting it would leave the radar with no position at all rather than with a
+         * stale one.
+         */
         cJSON *source = cJSON_GetObjectItemCaseSensitive(general, "centerSource");
         if (cJSON_IsString(source) && source->valuestring) {
             if (strcmp(source->valuestring, "gps") == 0) {
-                candidate->center_source = RADAR_CENTER_SOURCE_GPS;
+                candidate->center_source = BOARD_HAS_USB_GPS ? RADAR_CENTER_SOURCE_GPS :
+                                                               RADAR_CENTER_SOURCE_MANUAL;
             } else if (strcmp(source->valuestring, "airport") == 0) {
                 candidate->center_source = RADAR_CENTER_SOURCE_AIRPORT;
             } else if (strcmp(source->valuestring, "location") == 0) {
@@ -921,7 +943,7 @@ bool RadarSettings::parseJson(const char *json, radar_settings_t *candidate,
                 candidate->center_source = RADAR_CENTER_SOURCE_MANUAL;
             }
         } else if (cJSON_IsBool(source)) {
-            candidate->center_source = cJSON_IsTrue(source) ?
+            candidate->center_source = (cJSON_IsTrue(source) && BOARD_HAS_USB_GPS) ?
                                        RADAR_CENTER_SOURCE_GPS : RADAR_CENTER_SOURCE_MANUAL;
         }
 
@@ -1086,16 +1108,28 @@ bool RadarSettings::parseJson(const char *json, radar_settings_t *candidate,
                 parse_bool_item(hardware, "showHints", candidate->hardware_show_hints);
             candidate->hardware_oled_i2c_addr =
                 clamp_int(parse_int_item(hardware, "oledI2cAddr", candidate->hardware_oled_i2c_addr), 0x03, 0x77);
+            /*
+             * Clamp to the unassigned sentinel, not to 0. Clamping the low end at 0 turns "no
+             * pin wired" into GPIO 0 -- the boot button -- which then reads as a phantom press
+             * and, with both encoder phases landing on it, makes the knob driver reject a
+             * configuration where A equals B. The high end is this target's last real GPIO;
+             * the ESP32-P4 build's 63 would be accepted and then quietly do nothing.
+             */
             candidate->hardware_confirm_gpio =
-                clamp_int(parse_int_item(hardware, "confirmGpio", candidate->hardware_confirm_gpio), 0, 63);
+                clamp_int(parse_int_item(hardware, "confirmGpio", candidate->hardware_confirm_gpio),
+                          RADAR_SETTINGS_GPIO_UNASSIGNED, RADAR_SETTINGS_MAX_GPIO);
             candidate->hardware_back_gpio =
-                clamp_int(parse_int_item(hardware, "backGpio", candidate->hardware_back_gpio), 0, 63);
+                clamp_int(parse_int_item(hardware, "backGpio", candidate->hardware_back_gpio),
+                          RADAR_SETTINGS_GPIO_UNASSIGNED, RADAR_SETTINGS_MAX_GPIO);
             candidate->hardware_rotary_a_gpio =
-                clamp_int(parse_int_item(hardware, "rotaryAGpio", candidate->hardware_rotary_a_gpio), 0, 63);
+                clamp_int(parse_int_item(hardware, "rotaryAGpio", candidate->hardware_rotary_a_gpio),
+                          RADAR_SETTINGS_GPIO_UNASSIGNED, RADAR_SETTINGS_MAX_GPIO);
             candidate->hardware_rotary_b_gpio =
-                clamp_int(parse_int_item(hardware, "rotaryBGpio", candidate->hardware_rotary_b_gpio), 0, 63);
+                clamp_int(parse_int_item(hardware, "rotaryBGpio", candidate->hardware_rotary_b_gpio),
+                          RADAR_SETTINGS_GPIO_UNASSIGNED, RADAR_SETTINGS_MAX_GPIO);
             candidate->hardware_rotary_push_gpio =
-                clamp_int(parse_int_item(hardware, "rotaryPushGpio", candidate->hardware_rotary_push_gpio), 0, 63);
+                clamp_int(parse_int_item(hardware, "rotaryPushGpio", candidate->hardware_rotary_push_gpio),
+                          RADAR_SETTINGS_GPIO_UNASSIGNED, RADAR_SETTINGS_MAX_GPIO);
         }
     }
 
@@ -1230,9 +1264,12 @@ char *RadarSettings::toJson(const char *wifi_ssid) const
     cJSON_AddNumberToObject(location, "lat", center_location_lat);
     cJSON_AddNumberToObject(location, "lon", center_location_lon);
     cJSON_AddNumberToObject(general, "defaultRange", default_range_mi);
-    cJSON_AddStringToObject(general, "displayType",
-                            display_type == RADAR_DISPLAY_TYPE_800_800_3_4_INCH ?
-                            "800_800_3_4" : "720_720_4");
+    /*
+     * displayType is deliberately not reported. It names an ESP32-P4 panel profile, and on this
+     * board the stored value is whatever a settings import last left there -- emitting it made
+     * /api/settings claim a 720x720 panel on a 466x466 display. The field is still accepted on
+     * import so a file from a P4 board loads cleanly; it simply has nothing to describe here.
+     */
     cJSON_AddStringToObject(general, "dataSource",
                             aircraft_data_source == AIRCRAFT_DATA_SOURCE_ADSB_LOL ? "adsb_lol" :
                             (aircraft_data_source == AIRCRAFT_DATA_SOURCE_ADSB_FI ? "adsb_fi" :

@@ -25,10 +25,26 @@ namespace {
  * aircraft feed has to be more conservative to avoid starving SDIO traffic.
  */
 constexpr size_t HTTP_INTERNAL_FALLBACK_MAX_BYTES = 4096;
-constexpr size_t HTTP_MIN_AIRCRAFT_DMA_FREE_BYTES = 32 * 1024;
-constexpr size_t HTTP_MIN_AIRCRAFT_DMA_LARGEST_BLOCK_BYTES = 20 * 1024;
-constexpr size_t HTTP_MIN_BUFFER_DMA_FREE_BYTES = 16 * 1024;
-constexpr size_t HTTP_MIN_BUFFER_DMA_LARGEST_BLOCK_BYTES = 8 * 1024;
+/*
+ * TLS headroom thresholds, recalibrated for the ESP32-S3.
+ *
+ * These guard against starting a handshake that cannot finish. The ESP32-P4 values (32K free /
+ * 20K largest, 16K/8K) do not survive here: this chip has about 400 KB of internal RAM against
+ * the P4's far larger pool, and the WiFi/LWIP receive path needs DMA-capable internal buffers
+ * that cannot be moved to PSRAM. After any burst of traffic the largest free internal block
+ * settles around 16 KB and does not recover, so a 20 KB contiguous requirement latched off
+ * permanently: total free stayed near 34 KB while the radar refused to fetch again until it was
+ * rebooted. Contiguity, not capacity, was the binding constraint.
+ *
+ * mbedTLS now allocates from PSRAM (CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC), so what remains to be
+ * covered here is the socket and record handling, which is much smaller. These values sit below
+ * the observed post-fragmentation floor while still refusing to start when memory is genuinely
+ * gone. Measure before changing them: /api/status reports dma.free and dma.largestFree.
+ */
+constexpr size_t HTTP_MIN_AIRCRAFT_DMA_FREE_BYTES = 24 * 1024;
+constexpr size_t HTTP_MIN_AIRCRAFT_DMA_LARGEST_BLOCK_BYTES = 12 * 1024;
+constexpr size_t HTTP_MIN_BUFFER_DMA_FREE_BYTES = 12 * 1024;
+constexpr size_t HTTP_MIN_BUFFER_DMA_LARGEST_BLOCK_BYTES = 6 * 1024;
 
 /* Return whether a URL will require TLS setup. */
 bool is_https_url(const char *url)
@@ -485,7 +501,8 @@ esp_http_client_handle_t RadarHttpClient::createAircraftClient()
     config.crt_bundle_attach = esp_crt_bundle_attach;
     config.buffer_size = HTTP_READ_CHUNK_BYTES;
     config.buffer_size_tx = 1024;
-    config.user_agent = "esp32-p4-radar/1.0";
+    /* Identifies this firmware to the ADS-B feeds; name the board it actually runs on. */
+    config.user_agent = "esp32-s3-radar/1.0";
     config.event_handler = eventHandler;
     config.max_redirection_count = 2;
     config.keep_alive_enable = true;

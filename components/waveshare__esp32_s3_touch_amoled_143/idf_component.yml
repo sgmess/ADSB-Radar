@@ -1,0 +1,12 @@
+dependencies:
+  esp_lcd_co5300: '*'
+  espressif/esp_lcd_touch: '*'
+  espressif/esp_lvgl_adapter:
+    public: true
+    version: ~0.7
+  idf: '>=5.5'
+  lvgl/lvgl: '>=8,<10'
+description: Board Support Package (BSP) for Waveshare ESP32-S3-Touch-AMOLED-1.43
+targets:
+- esp32s3
+version: 1.0.0

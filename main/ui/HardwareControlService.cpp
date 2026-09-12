@@ -62,7 +62,7 @@ void HardwareControlService::timerEntry(lv_timer_t *timer)
 
 gpio_num_t HardwareControlService::gpioFromSetting(int value) const
 {
-    if (value < 0 || value > 63) {
+    if (value < 0 || value > RADAR_SETTINGS_MAX_GPIO) {
         return GPIO_NUM_NC;
     }
     return (gpio_num_t)value;
@@ -85,46 +85,77 @@ void HardwareControlService::initInputs()
     rotary_b_gpio = gpioFromSetting(owner->settings.hardware_rotary_b_gpio);
     rotary_push_gpio = gpioFromSetting(owner->settings.hardware_rotary_push_gpio);
 
-    const uint64_t pin_mask = (1ULL << confirm_gpio) |
-                              (1ULL << back_gpio) |
-                              (1ULL << rotary_push_gpio);
-    gpio_config_t io_conf = {};
-    io_conf.pin_bit_mask = pin_mask;
-    io_conf.mode = GPIO_MODE_INPUT;
-    io_conf.pull_up_en = GPIO_PULLUP_ENABLE;
-    io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
-    io_conf.intr_type = GPIO_INTR_DISABLE;
-    esp_err_t err = gpio_config(&io_conf);
-    if (err != ESP_OK) {
-        ESP_LOGW(TAG, "Button GPIO setup failed: %s", esp_err_to_name(err));
+    /*
+     * Every pin here is optional. Shifting by GPIO_NUM_NC (-1) would be undefined, so build the
+     * mask only from pins that are actually assigned and skip gpio_config entirely when none
+     * are -- which is the default on this board.
+     */
+    const gpio_num_t button_pins[] = {confirm_gpio, back_gpio, rotary_push_gpio};
+    uint64_t pin_mask = 0;
+    for (gpio_num_t pin : button_pins) {
+        if (pin != GPIO_NUM_NC) {
+            pin_mask |= 1ULL << (int)pin;
+        }
+    }
+    if (pin_mask != 0) {
+        gpio_config_t io_conf = {};
+        io_conf.pin_bit_mask = pin_mask;
+        io_conf.mode = GPIO_MODE_INPUT;
+        io_conf.pull_up_en = GPIO_PULLUP_ENABLE;
+        io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
+        io_conf.intr_type = GPIO_INTR_DISABLE;
+        esp_err_t err = gpio_config(&io_conf);
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "Button GPIO setup failed: %s", esp_err_to_name(err));
+        }
     }
 
-    knob_config_t knob_cfg = {};
-    knob_cfg.default_direction = 0;
-    knob_cfg.gpio_encoder_a = rotary_a_gpio;
-    knob_cfg.gpio_encoder_b = rotary_b_gpio;
-    knob_cfg.enable_power_save = false;
-    rotary_knob_handle = iot_knob_create(&knob_cfg);
-    if (rotary_knob_handle) {
-        iot_knob_register_cb((knob_handle_t)rotary_knob_handle, KNOB_LEFT,
-                             HardwareControlService::knobLeftEntry, this);
-        iot_knob_register_cb((knob_handle_t)rotary_knob_handle, KNOB_RIGHT,
-                             HardwareControlService::knobRightEntry, this);
-    } else {
-        ESP_LOGW(TAG, "Rotary knob driver setup failed");
+    /*
+     * The knob driver needs both encoder phases on distinct pins: one alone cannot report
+     * direction, and two on the same pin is a configuration it rightly refuses.
+     */
+    if (rotary_a_gpio != GPIO_NUM_NC && rotary_b_gpio != GPIO_NUM_NC &&
+        rotary_a_gpio != rotary_b_gpio) {
+        knob_config_t knob_cfg = {};
+        knob_cfg.default_direction = 0;
+        knob_cfg.gpio_encoder_a = rotary_a_gpio;
+        knob_cfg.gpio_encoder_b = rotary_b_gpio;
+        knob_cfg.enable_power_save = false;
+        rotary_knob_handle = iot_knob_create(&knob_cfg);
+        if (rotary_knob_handle) {
+            iot_knob_register_cb((knob_handle_t)rotary_knob_handle, KNOB_LEFT,
+                                 HardwareControlService::knobLeftEntry, this);
+            iot_knob_register_cb((knob_handle_t)rotary_knob_handle, KNOB_RIGHT,
+                                 HardwareControlService::knobRightEntry, this);
+        } else {
+            ESP_LOGW(TAG, "Rotary knob driver setup failed");
+        }
     }
 
     encoder_pending_delta = 0;
     encoder_event_accum = 0;
-    confirm_last_level = gpio_get_level(confirm_gpio);
-    back_last_level = gpio_get_level(back_gpio);
-    push_last_level = gpio_get_level(rotary_push_gpio);
+    confirm_last_level = readLevel(confirm_gpio);
+    back_last_level = readLevel(back_gpio);
+    push_last_level = readLevel(rotary_push_gpio);
     confirm_last_change_us = back_last_change_us = push_last_change_us = esp_timer_get_time();
+    if (pin_mask == 0 && !rotary_knob_handle) {
+        ESP_LOGI(TAG, "No physical controls assigned; using touch only");
+        return;
+    }
     ESP_LOGI(TAG, "Rotary encoder configured: CLK=%d DATA=%d PUSH=%d initial=%d/%d/%d",
              rotary_a_gpio, rotary_b_gpio, rotary_push_gpio,
-             gpio_get_level(rotary_a_gpio), gpio_get_level(rotary_b_gpio), gpio_get_level(rotary_push_gpio));
+             readLevel(rotary_a_gpio), readLevel(rotary_b_gpio), readLevel(rotary_push_gpio));
     ESP_LOGI(TAG, "Hardware buttons configured: confirm=%d back=%d initial=%d/%d",
              confirm_gpio, back_gpio, confirm_last_level, back_last_level);
+}
+
+/*
+ * Read a pin that may not be wired. An unassigned button must look permanently released, and
+ * these inputs are active-low with a pull-up, so the idle level is 1.
+ */
+int HardwareControlService::readLevel(gpio_num_t gpio)
+{
+    return gpio == GPIO_NUM_NC ? 1 : gpio_get_level(gpio);
 }
 
 void HardwareControlService::createMenu(lv_obj_t *screen)
@@ -134,28 +165,29 @@ void HardwareControlService::createMenu(lv_obj_t *screen)
     }
 
     menu = lv_obj_create(screen);
-    lv_obj_set_size(menu, 440, 560);
-    lv_obj_set_pos(menu, (SCREEN_W - 440) / 2, 72);
+    lv_obj_set_size(menu, HW_MENU_W, HW_MENU_H);
+    lv_obj_set_pos(menu, (SCREEN_W - HW_MENU_W) / 2, (SCREEN_H - HW_MENU_H) / 2);
     lv_obj_set_style_bg_color(menu, lv_color_hex(owner->settings.colors.popup_bg), 0);
     lv_obj_set_style_bg_opa(menu, LV_OPA_90, 0);
     lv_obj_set_style_border_color(menu, lv_color_hex(owner->settings.colors.popup_border), 0);
     lv_obj_set_style_border_width(menu, 2, 0);
     lv_obj_set_style_radius(menu, 10, 0);
-    lv_obj_set_style_pad_all(menu, 16, 0);
+    lv_obj_set_style_pad_all(menu, 8, 0);
     lv_obj_clear_flag(menu, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(menu, LV_OBJ_FLAG_HIDDEN);
 
     title = owner->make_label(menu, "DISPLAY MENU",
                               owner->configured_label_font(owner->settings.label_styles.button),
                               owner->settings.colors.button_text);
-    lv_obj_set_pos(title, 0, 8);
-    lv_obj_set_width(title, 408);
+    lv_obj_set_pos(title, 0, 4);
+    lv_obj_set_width(title, HW_MENU_W - 16);
     lv_obj_set_style_text_align(title, LV_TEXT_ALIGN_CENTER, 0);
 
     for (int i = 0; i < HW_MENU_ITEM_COUNT; ++i) {
         lv_obj_t *row = lv_obj_create(menu);
-        lv_obj_set_size(row, 392, 38);
-        lv_obj_set_pos(row, 8, 50 + (i * 42));
+        lv_obj_set_size(row, HW_MENU_ROW_W, HW_MENU_ROW_H);
+        lv_obj_set_pos(row, (HW_MENU_W - 16 - HW_MENU_ROW_W) / 2,
+                       HW_MENU_ROW_TOP + (i * HW_MENU_ROW_PITCH));
         lv_obj_set_style_bg_color(row, lv_color_hex(owner->settings.colors.button_pressed), 0);
         lv_obj_set_style_bg_opa(row, LV_OPA_20, 0);
         lv_obj_set_style_border_color(row, lv_color_hex(owner->settings.colors.popup_border), 0);
@@ -167,14 +199,14 @@ void HardwareControlService::createMenu(lv_obj_t *screen)
         labels[i] = owner->make_label(row, "",
                                       owner->configured_label_font(owner->settings.label_styles.button, -2),
                                       owner->settings.colors.text_primary);
-        lv_obj_set_pos(labels[i], 12, 8);
-        lv_obj_set_width(labels[i], 210);
+        lv_obj_set_pos(labels[i], 8, 4);
+        lv_obj_set_width(labels[i], HW_MENU_LABEL_W);
 
         values[i] = owner->make_label(row, "",
                                       owner->configured_label_font(owner->settings.label_styles.button, -2),
                                       owner->settings.colors.button_status);
-        lv_obj_set_pos(values[i], 226, 8);
-        lv_obj_set_width(values[i], 150);
+        lv_obj_set_pos(values[i], HW_MENU_VALUE_X, 4);
+        lv_obj_set_width(values[i], HW_MENU_ROW_W - HW_MENU_VALUE_X - 8);
         lv_obj_set_style_text_align(values[i], LV_TEXT_ALIGN_RIGHT, 0);
 
         rows[i] = row;
@@ -183,8 +215,9 @@ void HardwareControlService::createMenu(lv_obj_t *screen)
     help = owner->make_label(menu, "",
                              owner->configured_label_font(owner->settings.label_styles.gps, -2),
                              owner->settings.colors.text_secondary);
-    lv_obj_set_pos(help, 8, 502);
-    lv_obj_set_width(help, 392);
+    lv_obj_set_pos(help, (HW_MENU_W - 16 - HW_MENU_ROW_W) / 2,
+                   HW_MENU_ROW_TOP + (HW_MENU_ITEM_COUNT * HW_MENU_ROW_PITCH) + 4);
+    lv_obj_set_width(help, HW_MENU_ROW_W);
     lv_obj_set_style_text_align(help, LV_TEXT_ALIGN_CENTER, 0);
     refreshMenu();
 }
@@ -452,6 +485,10 @@ void HardwareControlService::applyButtonAction(int action)
 
 bool HardwareControlService::consumeButtonPress(gpio_num_t gpio, int *last_level, int64_t *last_change_us)
 {
+    if (gpio == GPIO_NUM_NC) {
+        return false;
+    }
+
     int level = gpio_get_level(gpio);
     int64_t now_us = esp_timer_get_time();
     if (level == *last_level) {

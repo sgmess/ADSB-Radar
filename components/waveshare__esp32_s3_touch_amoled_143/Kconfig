@@ -1,0 +1,58 @@
+menu "Board Support Package"
+
+    config BSP_ERROR_CHECK
+        bool "Enable error check in BSP"
+        default y
+        help
+            Error check assert the application before returning the error code.
+
+    menu "I2C"
+        config BSP_I2C_NUM
+            int "I2C peripheral index"
+            default 0
+            range 0 1
+            help
+                ESP32-S3 has two I2C peripherals, pick the one you want to use.
+                The touch controller, IMU and RTC all share this bus.
+
+        config BSP_I2C_FAST_MODE
+            bool "Enable I2C fast mode"
+            default y
+            help
+                I2C has two speed modes: normal (100kHz) and fast (400kHz).
+
+        config BSP_I2C_CLK_SPEED_HZ
+            int
+            default 400000 if BSP_I2C_FAST_MODE
+            default 100000
+    endmenu
+
+    menu "Display"
+        config BSP_LCD_TRANS_QUEUE_DEPTH
+            int "Depth of the QSPI transmission queue"
+            default 10
+            range 1 10
+            help
+                Cache the QSPI screen instruction/pixel data transmission tasks to implement
+                asynchronous non-blocking screen refreshing, so the CPU can execute other logic
+                after submitting a task.
+
+        config BSP_DISPLAY_LVGL_BUF_HEIGHT
+            int "LVGL draw buffer height in lines"
+            default 12
+            range 10 466
+            help
+                Height of each of the two LVGL draw buffers, in display lines. The buffers live
+                in INTERNAL RAM, not PSRAM, because DMA reading PSRAM cannot keep the SPI FIFO
+                fed while WiFi is also using PSRAM. Each costs hor_res * this * 2 bytes, so 20
+                lines is about 11 KB per buffer and 22 KB for the pair.
+
+                This trades directly against WiFi and TLS, both of which need internal RAM that
+                only exists once. 40 lines (73 KB for the pair) starves esp_wifi_init(), which
+                fails with ESP_ERR_NO_MEM and panics the board into a boot loop. 20 lines boots
+                but leaves too little DMA-capable heap for the TLS handshake, so the aircraft
+                fetch refuses to start and the radar shows NO MEM. Raise this only while
+                watching both the startup heap log and /api/status.
+    endmenu
+
+endmenu

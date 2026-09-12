@@ -10,43 +10,133 @@
 #include "lvgl.h"
 #include "zlib.h"
 
+#include "BoardConfig.hpp"
 #include "bsp/esp-bsp.h"
 
 /*
  * Shared display, networking, and storage limits for the radar application.
  *
- * These values are deliberately centralised because the ESP32-P4 build is
- * sensitive to RAM pressure. Increasing a canvas size, HTTP buffer, label
- * count, or task stack here can change whether WiFi, TLS, USB GPS, and LVGL
- * can all run together. Prefer changing these constants with a monitor session
- * open so heap and watchdog behaviour can be checked on real hardware.
+ * These values are deliberately centralised because the build is sensitive to RAM pressure.
+ * Increasing a canvas size, HTTP buffer, label count, or task stack here can change whether
+ * WiFi, TLS, and LVGL can all run together. Prefer changing these constants with a monitor
+ * session open so heap and watchdog behaviour can be checked on real hardware.
  */
-extern int radar_screen_w;
-extern int radar_screen_h;
-extern int radar_size;
-extern int radar_center;
-extern int radar_radius;
-extern int radar_bg_radius;
-extern int radar_y;
-extern int control_arc_radius;
-extern int heading_label_radius;
 
-#define SCREEN_W radar_screen_w
-#define SCREEN_H radar_screen_h
-#define RADAR_SIZE radar_size
-#define RADAR_CENTER radar_center
-#define RADAR_RADIUS radar_radius
-#define RADAR_BG_RADIUS radar_bg_radius
-#define RADAR_Y radar_y
-#define CONTROL_ARC_RADIUS control_arc_radius
-#define CONTROL_ARC_WIDTH 20
-#define CONTROL_BUTTON_W 184
-#define CONTROL_BUTTON_H 56
+/*
+ * Panel geometry.
+ *
+ * The ESP32-P4 build derived these at boot because it supported two round LCD profiles chosen
+ * from NVS. This board has one fixed 466x466 AMOLED, so they are compile-time constants and the
+ * compiler can fold the arithmetic in the per-pixel drawing paths, which matters more here: the
+ * S3 renders in software where the P4 had a 2D accelerator.
+ */
+#define SCREEN_W BOARD_SCREEN_W
+#define SCREEN_H BOARD_SCREEN_H
+
+/* Radar plot, inset by RADAR_Y on every side so the bezel arc has room for the controls. */
+#define RADAR_Y 8
+#define RADAR_SIZE (SCREEN_W - (RADAR_Y * 2))
+#define RADAR_CENTER (RADAR_SIZE / 2)
+#define RADAR_BG_RADIUS RADAR_CENTER
+#define RADAR_RADIUS (RADAR_CENTER - 13)
+
+/*
+ * Control arc. CurvedButtonController draws glyphs centred on CONTROL_ARC_RADIUS + 1 in boxes
+ * 20px tall, so the outermost text pixel sits at radius +11. Keep that inside SCREEN_W / 2
+ * (233) or the captions clip against the bezel.
+ */
+#define CONTROL_ARC_RADIUS (RADAR_RADIUS + 9)
+#define CONTROL_ARC_WIDTH 13
+#define HEADING_LABEL_RADIUS (RADAR_RADIUS - 20)
+
+/*
+ * Bezel button hit targets. The 720x720 profile used 184x56; scaling that by the 0.647 linear
+ * ratio would give 119x36, but 36px is below a comfortable fingertip target, so the height keeps
+ * a floor of 44 and only the width scales. The three buttons are positioned from their arc
+ * midpoints rather than from hardcoded corners, which keeps the touch target under the caption
+ * that CurvedButtonController draws at that same midpoint.
+ */
+#define CONTROL_BUTTON_W 122
+#define CONTROL_BUTTON_H 44
 #define CONTROL_TEXT_MAX 18
-#define AIRCRAFT_POPUP_W 320
-#define AIRCRAFT_POPUP_H 380
-#define AIRCRAFT_PHOTO_W 200
-#define AIRCRAFT_PHOTO_H 112
+#define RANGE_BUTTON_ARC_MID 230
+#define WIFI_BUTTON_ARC_MID 180
+#define STATUS_BUTTON_ARC_MID 130
+
+/* Round hit targets for the range step/pick controls, spaced along the same arc. */
+#define RANGE_STEP_HITBOX_SIZE 52
+#define RANGE_PICK_HITBOX_SIZE 58
+#define RANGE_STEP_DOWN_DEG 254
+#define RANGE_PICK_DEG 230
+#define RANGE_STEP_UP_DEG 206
+
+/*
+ * Aircraft detail popup. Sized so the six-line body still fits at Montserrat 12 -- the text has
+ * a legibility floor that does not scale with the panel, so the popup gives up proportionally
+ * less width than everything else on this screen.
+ */
+#define AIRCRAFT_POPUP_W 260
+#define AIRCRAFT_POPUP_H 300
+#define AIRCRAFT_PHOTO_W 180
+#define AIRCRAFT_PHOTO_H 101
+#define AIRCRAFT_POPUP_TITLE_W 190
+#define AIRCRAFT_POPUP_PHOTO_Y 34
+#define AIRCRAFT_POPUP_STATUS_Y 66
+#define AIRCRAFT_POPUP_STATUS_H 54
+#define AIRCRAFT_POPUP_BODY_Y 142
+#define AIRCRAFT_POPUP_MARGIN_X 22
+#define AIRCRAFT_POPUP_MARGIN_TOP 35
+#define AIRCRAFT_POPUP_MARGIN_BOTTOM 60
+
+/*
+ * Touch menus.
+ *
+ * Each is centred, because an off-centre box on a round panel loses its corners to the bezel.
+ * Widths are checked against the chord at the box's own top and bottom edge: at 466 the usable
+ * half-width at +/-170px from centre is only about 159px, which is what caps these at 300.
+ */
+#define RANGE_MENU_W 240
+#define RANGE_MENU_ROW_W 216
+#define RANGE_MENU_ROW_H 30
+#define RANGE_MENU_ROW_PITCH 34
+#define RANGE_MENU_PAD 10
+
+#define WIFI_MENU_W 240
+#define WIFI_MENU_ROW_W 216
+#define WIFI_MENU_ROW_H 38
+#define WIFI_MENU_ROW_PITCH 42
+#define WIFI_MENU_PAD 10
+
+#define DATA_MENU_W 300
+#define DATA_MENU_ROW_W 276
+#define DATA_MENU_ROW_H 34
+#define DATA_MENU_ROW_PITCH 38
+#define DATA_MENU_GROUP_GAP 8
+#define DATA_MENU_PAD 10
+
+/*
+ * The hardware menu is driven by the rotary encoder, not by touch, so its rows are free to be
+ * shorter than a fingertip target and all ten items still fit on this panel.
+ */
+#define HW_MENU_W 284
+#define HW_MENU_H 364
+#define HW_MENU_ROW_W 252
+#define HW_MENU_ROW_H 24
+#define HW_MENU_ROW_PITCH 27
+#define HW_MENU_ROW_TOP 40
+#define HW_MENU_LABEL_W 130
+#define HW_MENU_VALUE_X 138
+
+/*
+ * Centred text that is allowed to be wider than the chord at its own height: the bezel clips
+ * the ends, but these strings are normally short enough to sit within the visible span. The 720
+ * profile used the same proportion (520 of 720).
+ */
+#define PORTAL_TEXT_W 340
+#define NOTIFICATION_LABEL_W 336
+#define NOTIFICATION_LABEL_TOP 30
+#define NOTIFICATION_LABEL_PITCH 18
+
 #define DEFAULT_BRIGHTNESS 95
 #define MAX_AIRCRAFT_TARGETS 512
 #define MAX_AIRCRAFT_LABELS 50
@@ -57,9 +147,8 @@ extern int heading_label_radius;
 #define MAX_PARSED_AIRCRAFT 512
 #define RANGE_RING_COUNT 5
 #define HEADING_LABEL_COUNT 12
-#define RADAR_GRID_MARGIN 20
-#define RADAR_GRID_SPACING 50
-#define HEADING_LABEL_RADIUS heading_label_radius
+#define RADAR_GRID_MARGIN 13
+#define RADAR_GRID_SPACING 32
 #define SWEEP_TIMER_MS 10
 #define HTTP_RESPONSE_INITIAL_BYTES (96 * 1024)
 #define HTTP_RESPONSE_MAX_BYTES (512 * 1024)

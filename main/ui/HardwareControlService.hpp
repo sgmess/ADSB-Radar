@@ -40,6 +40,9 @@ private:
     bool menuVisible() const;
     gpio_num_t gpioFromSetting(int value) const;
 
+    /* Read a possibly-unassigned input pin, reporting an unwired one as released. */
+    static int readLevel(gpio_num_t gpio);
+
     RadarApp *owner = nullptr;
     void *rotary_knob_handle = nullptr;
     volatile int encoder_pending_delta = 0;
@@ -52,11 +55,16 @@ private:
     int64_t push_last_change_us = 0;
     int selected = 0;
     int64_t last_use_us = 0;
-    gpio_num_t confirm_gpio = GPIO_NUM_30;
-    gpio_num_t back_gpio = GPIO_NUM_46;
-    gpio_num_t rotary_a_gpio = GPIO_NUM_47;
-    gpio_num_t rotary_b_gpio = GPIO_NUM_52;
-    gpio_num_t rotary_push_gpio = GPIO_NUM_48;
+    /*
+     * Unassigned until initInputs() reads the persisted pin choices. This board wires no
+     * encoder or buttons of its own, and its only spare-looking pins (47/48) are the shared
+     * I2C bus, so there is no safe pin to default to.
+     */
+    gpio_num_t confirm_gpio = GPIO_NUM_NC;
+    gpio_num_t back_gpio = GPIO_NUM_NC;
+    gpio_num_t rotary_a_gpio = GPIO_NUM_NC;
+    gpio_num_t rotary_b_gpio = GPIO_NUM_NC;
+    gpio_num_t rotary_push_gpio = GPIO_NUM_NC;
 
     lv_obj_t *menu = nullptr;
     lv_obj_t *title = nullptr;

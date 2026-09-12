@@ -262,7 +262,7 @@ void AircraftRouteService::startFetch(const char *callsign)
 
     if (xTaskCreateWithCaps(RadarApp::aircraft_route_fetch_task_entry, "aircraft_route",
                             ROUTE_TASK_STACK, request, ROUTE_TASK_PRIORITY, NULL,
-                            MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) != pdPASS) {
+                            BOARD_TASK_STACK_CAPS) != pdPASS) {
         owner->aircraft_route_fetch_running = false;
         heap_caps_free(request);
         updateRouteFromTask(owner->aircraft_route_request_id, "ROUTE ERR");

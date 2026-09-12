@@ -6,6 +6,14 @@ extern "C" {
 #endif
 
 /**
+ * @brief BSP touch configuration structure
+ *
+ */
+typedef struct {
+    void *dummy;    /*!< Prepared for future use. */
+} bsp_touch_config_t;
+
+/**
  * @brief Create new touchscreen
  *
  * If you want to free resources allocated by this function, you can use esp_lcd_touch API, ie.:

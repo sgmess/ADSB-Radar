@@ -5,6 +5,15 @@
 
 #include "esp_err.h"
 
+#include "BoardConfig.hpp"
+
+/*
+ * Physical-control pin assignments. The sentinel means "not wired"; the maximum is this
+ * target's highest usable GPIO, above which gpio_config() quietly does nothing.
+ */
+#define RADAR_SETTINGS_GPIO_UNASSIGNED (-1)
+#define RADAR_SETTINGS_MAX_GPIO 48
+
 #define RADAR_SETTINGS_NAMESPACE "radar_cfg"
 #define RADAR_SETTINGS_KEY "settings"
 #define AIRPORTDB_API_TOKEN_MAX 192

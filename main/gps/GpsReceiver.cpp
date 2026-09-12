@@ -6,10 +6,71 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "bsp/esp-bsp.h"
 #include "esp_err.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+
+#if !BOARD_HAS_USB_GPS
+
+/*
+ * Stub backend for boards without a USB-A host port.
+ *
+ * The ESP32-S3-Touch-AMOLED-1.43 exposes only the S3's native USB-C, which is the programming
+ * and console port and has no switchable VBUS, so a bus-powered CDC GPS dongle can neither be
+ * powered nor enumerated. Rather than carry the USB host stack and its buffers for a device
+ * that can never appear, the receiver reports the feature as unavailable and
+ * RadarPositionProvider falls back to the manual centre exactly as it does for a stale fix.
+ */
+
+static const char *TAG = "gps_receiver";
+
+bool GpsReceiver::start()
+{
+    ESP_LOGI(TAG, "USB GPS not available on this board; using the configured radar centre");
+
+    if (!mutex) {
+        mutex = xSemaphoreCreateMutex();
+    }
+    if (!mutex) {
+        return false;
+    }
+
+    if (xSemaphoreTake(mutex, portMAX_DELAY) == pdTRUE) {
+        state = {};
+        snprintf(state.status, sizeof(state.status), "UNSUPPORTED");
+        snprintf(state.detail, sizeof(state.detail), "No USB host port on this board");
+        xSemaphoreGive(mutex);
+    }
+
+    return false;
+}
+
+void GpsReceiver::getSnapshot(gps_snapshot_t *out) const
+{
+    if (!out) {
+        return;
+    }
+
+    *out = {};
+    snprintf(out->status, sizeof(out->status), "UNSUPPORTED");
+    snprintf(out->detail, sizeof(out->detail), "No USB host port on this board");
+
+    if (mutex && xSemaphoreTake(mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+        *out = state;
+        xSemaphoreGive(mutex);
+    }
+}
+
+bool GpsReceiver::getFix(double *lat, double *lon) const
+{
+    (void)lat;
+    (void)lon;
+    return false;
+}
+
+#else
+
+#include "bsp/esp-bsp.h"
 #include "freertos/idf_additions.h"
 #include "usb/usb_host.h"
 
@@ -29,7 +90,7 @@ bool GpsReceiver::start()
     }
 
     if (xTaskCreateWithCaps(GpsReceiver::taskEntry, "gps_usb", 8192, this, 4, &task_handle,
-                            MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) != pdPASS) {
+                            BOARD_TASK_STACK_CAPS) != pdPASS) {
         task_handle = nullptr;
         return false;
     }
@@ -512,3 +573,5 @@ void GpsReceiver::fillComputedStatus(gps_snapshot_t *snapshot, int64_t now_ms)
                  snapshot->satellites);
     }
 }
+
+#endif // BOARD_HAS_USB_GPS

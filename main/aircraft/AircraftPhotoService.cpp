@@ -319,7 +319,7 @@ void AircraftPhotoService::startFetch(const char *icao)
 
     if (xTaskCreateWithCaps(RadarApp::aircraft_photo_fetch_task_entry, "aircraft_photo",
                             PHOTO_TASK_STACK, request, PHOTO_TASK_PRIORITY, NULL,
-                            MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) != pdPASS) {
+                            BOARD_TASK_STACK_CAPS) != pdPASS) {
         owner->aircraft_photo_fetch_running = false;
         heap_caps_free(request);
         owner->set_aircraft_photo_status_text("PHOTO ERR");

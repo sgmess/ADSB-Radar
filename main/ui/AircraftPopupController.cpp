@@ -175,16 +175,21 @@ void AircraftPopupController::show(const aircraft_data_t *aircraft, int screen_x
 
     const int popup_w = AIRCRAFT_POPUP_W;
     const int popup_h = AIRCRAFT_POPUP_H;
+    /*
+     * Offer the popup down-right of the touch point, flipping to the other side when that would
+     * overhang, then clamp into the panel. The margins keep the corners clear of the round
+     * bezel; the bottom one also has to clear the curved controls on the lower arc.
+     */
     int x = screen_x + 14;
     int y = screen_y + 14;
-    if (x > SCREEN_W - popup_w - 34) {
+    if (x > SCREEN_W - popup_w - AIRCRAFT_POPUP_MARGIN_X) {
         x = screen_x - popup_w - 14;
     }
-    if (y > SCREEN_H - popup_h - 88) {
+    if (y > SCREEN_H - popup_h - AIRCRAFT_POPUP_MARGIN_BOTTOM) {
         y = screen_y - popup_h - 14;
     }
-    x = RadarApp::clamp_int(x, 34, SCREEN_W - popup_w - 34);
-    y = RadarApp::clamp_int(y, 54, SCREEN_H - popup_h - 92);
+    x = RadarApp::clamp_int(x, AIRCRAFT_POPUP_MARGIN_X, SCREEN_W - popup_w - AIRCRAFT_POPUP_MARGIN_X);
+    y = RadarApp::clamp_int(y, AIRCRAFT_POPUP_MARGIN_TOP, SCREEN_H - popup_h - AIRCRAFT_POPUP_MARGIN_BOTTOM);
     lv_obj_set_pos(owner->aircraft_popup, x, y);
     lv_obj_clear_flag(owner->aircraft_popup, LV_OBJ_FLAG_HIDDEN);
     owner->start_aircraft_photo_fetch(aircraft->icao);
@@ -251,7 +256,7 @@ void AircraftPopupController::create(lv_obj_t *screen)
 
     owner->aircraft_popup = lv_obj_create(screen);
     lv_obj_set_size(owner->aircraft_popup, AIRCRAFT_POPUP_W, AIRCRAFT_POPUP_H);
-    lv_obj_set_pos(owner->aircraft_popup, 200, 206);
+    lv_obj_set_pos(owner->aircraft_popup, (SCREEN_W - AIRCRAFT_POPUP_W) / 2, AIRCRAFT_POPUP_MARGIN_TOP);
     lv_obj_set_style_bg_color(owner->aircraft_popup, lv_color_hex(owner->settings.colors.popup_bg), 0);
     lv_obj_set_style_bg_opa(owner->aircraft_popup, LV_OPA_90, 0);
     lv_obj_set_style_border_color(owner->aircraft_popup, lv_color_hex(owner->settings.colors.popup_border), 0);
@@ -265,13 +270,13 @@ void AircraftPopupController::create(lv_obj_t *screen)
 
     owner->aircraft_popup_title = RadarApp::make_label(owner->aircraft_popup, "", &lv_font_montserrat_18,
                                                        owner->settings.colors.button_text);
-    lv_obj_set_width(owner->aircraft_popup_title, 250);
+    lv_obj_set_width(owner->aircraft_popup_title, AIRCRAFT_POPUP_TITLE_W);
     lv_label_set_long_mode(owner->aircraft_popup_title, LV_LABEL_LONG_CLIP);
     lv_obj_set_pos(owner->aircraft_popup_title, 10, 8);
 
     lv_obj_t *close = lv_obj_create(owner->aircraft_popup);
-    lv_obj_set_size(close, 34, 30);
-    lv_obj_align(close, LV_ALIGN_TOP_RIGHT, -6, 5);
+    lv_obj_set_size(close, 30, 28);
+    lv_obj_align(close, LV_ALIGN_TOP_RIGHT, -4, 4);
     lv_obj_set_style_bg_color(close, lv_color_hex(owner->settings.colors.button_pressed), 0);
     lv_obj_set_style_bg_opa(close, LV_OPA_70, 0);
     lv_obj_set_style_bg_color(close, lv_color_hex(owner->settings.colors.popup_border), LV_STATE_PRESSED);
@@ -290,26 +295,27 @@ void AircraftPopupController::create(lv_obj_t *screen)
     owner->aircraft_photo_image = lv_image_create(owner->aircraft_popup);
     lv_obj_set_pos(owner->aircraft_photo_image,
                    (AIRCRAFT_POPUP_W - AIRCRAFT_PHOTO_W) / 2,
-                   40);
+                   AIRCRAFT_POPUP_PHOTO_Y);
     lv_obj_add_flag(owner->aircraft_photo_image, LV_OBJ_FLAG_HIDDEN);
 
     owner->aircraft_photo_status = RadarApp::make_label(owner->aircraft_popup, "",
                                                         &lv_font_montserrat_12,
                                                         owner->settings.colors.text_secondary);
-    lv_obj_set_size(owner->aircraft_photo_status, AIRCRAFT_PHOTO_W, 60);
+    lv_obj_set_size(owner->aircraft_photo_status, AIRCRAFT_PHOTO_W, AIRCRAFT_POPUP_STATUS_H);
     lv_label_set_long_mode(owner->aircraft_photo_status, LV_LABEL_LONG_WRAP);
     lv_obj_set_style_text_align(owner->aircraft_photo_status, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_style_text_line_space(owner->aircraft_photo_status, 2, 0);
     lv_obj_set_pos(owner->aircraft_photo_status,
                    (AIRCRAFT_POPUP_W - AIRCRAFT_PHOTO_W) / 2,
-                   78);
+                   AIRCRAFT_POPUP_STATUS_Y);
     lv_obj_add_flag(owner->aircraft_photo_status, LV_OBJ_FLAG_HIDDEN);
 
     owner->aircraft_popup_body = RadarApp::make_label(owner->aircraft_popup, "",
                                                       &lv_font_montserrat_12,
                                                       owner->settings.colors.text_primary);
-    lv_obj_set_size(owner->aircraft_popup_body, AIRCRAFT_POPUP_W - 20, AIRCRAFT_POPUP_H - 168);
+    lv_obj_set_size(owner->aircraft_popup_body, AIRCRAFT_POPUP_W - 20,
+                    AIRCRAFT_POPUP_H - AIRCRAFT_POPUP_BODY_Y - 10);
     lv_label_set_long_mode(owner->aircraft_popup_body, LV_LABEL_LONG_WRAP);
     lv_obj_set_style_text_line_space(owner->aircraft_popup_body, 2, 0);
-    lv_obj_set_pos(owner->aircraft_popup_body, 10, 158);
+    lv_obj_set_pos(owner->aircraft_popup_body, 10, AIRCRAFT_POPUP_BODY_Y);
 }

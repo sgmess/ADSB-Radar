@@ -1,8 +1,7 @@
 # ADSB Radar
 
 ADSB Radar is ESP-IDF firmware for the Waveshare
-ESP32-P4-WIFI6-Touch-LCD-XC round touch display. It supports both the 4-inch
-720x720 panel and the 3.4-inch 800x800 panel from one firmware image. It is a
+ESP32-S3-Touch-AMOLED-1.43 round touch display, a 466x466 CO5300 AMOLED. It is a
 standalone aircraft radar display: the ESP32 joins WiFi, fetches live ADS-B
 traffic, plots aircraft around a configurable centre point, and draws a
 radar-style screen with range rings, heading information, altitude colours,
@@ -16,8 +15,14 @@ controls, or the built-in browser admin page.
 
 AI assistance has been used during development of this project, mainly for code
 generation, refactoring, documentation, and debugging. The firmware has still
-been built and tested on the target ESP32-P4 hardware as the project has
-evolved.
+been built and tested on the target hardware as the project has evolved.
+
+> **This branch is the ESP32-S3-Touch-AMOLED-1.43 port**, built and running on
+> that board. The original firmware
+> targets the Waveshare ESP32-P4-WIFI6-Touch-LCD-XC with a 720x720 or 800x800
+> round LCD; that version lives on `main`. The two boards differ in SoC, display
+> bus, touch controller, and WiFi path, so they are separate builds rather than
+> one image. See [Differences From The ESP32-P4 Build](#differences-from-the-esp32-p4-build).
 
 ## Screenshots
 
@@ -73,27 +78,26 @@ These screenshots are from `assets/UI Images`.
 
 The project is built as one firmware image for the supported round LCD variants:
 
-- 4-inch 720x720 round LCD.
-- 3.4-inch 800x800 round LCD.
-- ESP32-P4 target
-- Waveshare ESP32-P4 WiFi 6 Touch LCD XC BSP
+- 1.43-inch 466x466 round AMOLED (CO5300, QSPI).
+- ESP32-S3 target with native WiFi.
+- Waveshare ESP32-S3-Touch-AMOLED-1.43 BSP, included in this repository.
 - LVGL 9 user interface
 
-The firmware defaults to the 4-inch 720x720 profile. To use the 3.4-inch
-800x800 panel, open the browser admin after flashing and select `Hardware ->
-Display Type`, then save and reboot when prompted. The selected panel profile is
-stored in NVS, so it is retained across normal firmware updates unless NVS is
-erased.
+This board has one panel, so there is no display profile to choose. The radar
+layout is compiled for 466x466.
 
 Waveshare hardware documentation:
 
-- [ESP32-P4-WIFI6-Touch-LCD-XC product docs](https://docs.waveshare.com/ESP32-P4-WIFI6-Touch-LCD-XC)
-- [Waveshare ESP-IDF setup guide](https://docs.waveshare.com/ESP32-P4-WIFI6-Touch-LCD-XC/Development-Environment-Setup-IDF)
+- [ESP32-S3-Touch-AMOLED-1.43 wiki](https://www.waveshare.com/wiki/ESP32-S3-Touch-AMOLED-1.43)
+
+The wiki's pin table is misaligned and lists an I2C SCL of GPIO 49, which does
+not exist on an ESP32-S3. The pinout used by this firmware is documented in
+`components/waveshare__esp32_s3_touch_amoled_143/include/bsp/esp32_s3_touch_amoled_143.h`
+and was confirmed on hardware.
 
 ## Features
 
-- Full-screen radar drawn for the supported round LCD profiles: 4-inch 720x720
-  and 3.4-inch 800x800.
+- Full-screen radar drawn for the 1.43-inch 466x466 round AMOLED.
 - Live aircraft data from Airplanes.live, ADSB.lol, ADSB.fi, or a local
   `aircraft.json` feed such as readsb or dump1090.
 - Touch-screen range control with up to ten configurable ranges, refresh
@@ -134,8 +138,6 @@ Waveshare hardware documentation:
   import/export.
 - Aircraft table in the browser uses DataTables search and grouping, and marks
   aircraft currently shown with labels on the radar.
-- Optional USB GPS support for the radar centre, including GPS status and a
-  button to copy the current GPS fix into the manual position fields.
 - Optional SSD1306 128x64 I2C display for local status such as WiFi/IP address
   and live background activity such as aircraft fetches, weather refreshes,
   photo downloads, route lookups, and runway fetches.
@@ -149,28 +151,25 @@ Waveshare hardware documentation:
 
 Required:
 
-- Waveshare ESP32-P4-WIFI6-Touch-LCD-XC with one of these round LCDs:
-  - 4-inch 720x720.
-  - 3.4-inch 800x800.
-- USB cable for flashing, power, and serial monitor.
+- Waveshare ESP32-S3-Touch-AMOLED-1.43 (ESP32-S3, 16 MB flash, 8 MB PSRAM).
+- USB-C cable for flashing, power, and serial monitor.
 - A WiFi network with internet access.
 - A development machine running Linux, macOS, or Windows.
 
 Optional:
 
-- USB GPS receiver connected to the board USB-A port.
-- SSD1306 128x64 I2C display at address `0x3c` for status output.
-- Physical controls: confirm button on GPIO 30, back button on GPIO 46, rotary
-  encoder CLK on GPIO 47, DATA on GPIO 52, and encoder push button on GPIO 48.
+- SSD1306 128x64 I2C display at address `0x3c` for status output, on the shared
+  I2C bus (SDA GPIO 47, SCL GPIO 48).
+- Physical controls: a confirm button, a back button, and a rotary encoder.
+  These have no default pins on this board and are off until you assign them in
+  `Hardware -> SSD1306 Module` in the browser admin. Do not use GPIO 47 or 48
+  (the I2C bus), 9-14 or 21 (the panel), or 0 (the boot button).
 - AirportDB API token if you want runway drawing. AirportDB requires
   registration at [airportdb.io](https://airportdb.io) and the free API limit is
   5000 calls per month.
 - OpenWeather API key if you want to search for the radar centre by place name.
 - A local ADS-B receiver if you prefer to use a local `aircraft.json` feed
   instead of an internet aircraft API.
-
-The default display profile is 4-inch 720x720. If you are using the 3.4-inch
-800x800 display, change the profile from the browser admin after first boot.
 
 ## Software Required
 
@@ -251,7 +250,7 @@ somewhere else, use that full path instead.
 Set the target:
 
 ```bash
-idf.py set-target esp32p4
+idf.py set-target esp32s3
 ```
 
 The project already includes `sdkconfig` and `sdkconfig.defaults`. If you need to
@@ -259,7 +258,7 @@ regenerate local config from defaults:
 
 ```bash
 idf.py fullclean
-idf.py set-target esp32p4
+idf.py set-target esp32s3
 idf.py reconfigure
 ```
 
@@ -305,7 +304,7 @@ idf.py -p /dev/ttyACM0 flash monitor
 
 Replace `/dev/ttyACM0` with the port on your machine.
 
-If flashing cannot connect, put the ESP32-P4 into download mode:
+If flashing cannot connect, put the ESP32-S3 into download mode:
 
 1. Hold `BOOT`.
 2. Press and release `RESET`.
@@ -327,11 +326,6 @@ captive portal.
 After the device has joined your WiFi network, the radar screen shows the current
 status on the WiFi menu. Use the WiFi button on the radar to view the IP address,
 restart captive portal mode, or reboot the ESP32.
-
-If you are using the 3.4-inch 800x800 display, open the browser admin, go to
-`Hardware -> Display Type`, choose the 800x800 profile, save, and accept the
-reboot prompt. The device defaults to the 4-inch 720x720 profile after a fresh
-NVS erase.
 
 ## Browser Admin
 
@@ -451,14 +445,16 @@ and requires an OpenWeather API key.
 
 ## GPS
 
-Optional USB GPS support is built in.
+**Not available on this board.** The ESP32-P4 build supports a USB CDC NMEA GPS
+receiver on the board's USB-A host port. The ESP32-S3-Touch-AMOLED-1.43 exposes
+only the S3's native USB-C, which is the programming and console port and has no
+switchable VBUS, so a bus-powered GPS dongle can neither be powered nor
+enumerated.
 
-Connect a USB GPS receiver to the board USB-A port. In settings, choose GPS as
-the radar centre source. The settings page reports GPS status, including whether
-the receiver is connected, whether NMEA data is being received, and whether a fix
-is available.
-
-You can also copy the current GPS position into the manual radar centre fields.
+GPS is therefore compiled out here rather than left to fail: the browser admin
+hides the GPS centre source, and a settings file imported from a board that does
+have GPS falls back to the manual centre. Set the radar centre manually, by
+airport, or by place search.
 
 ## Device Controls
 
@@ -471,13 +467,89 @@ The round display has touch controls around the radar edge:
 
 If the optional physical controls are fitted, the rotary encoder can change the
 range or drive the small device menu. The confirm, back, and encoder push
-buttons can be mapped to common actions in the Hardware page. The GPIO
-pins are configurable, so the defaults do not have to match your final wiring.
+buttons can be mapped to common actions in the Hardware page. This board wires
+none of these itself and reserves most of its pins, so they start unassigned and
+disabled; enter your own GPIO numbers on the Hardware page to enable them.
 
 The optional SSD1306 display shows compact status information: WiFi state, IP
 address, current background activity, aircraft data status, range, aircraft
 count, and GPS state. It is deliberately simple, but useful when the round
 display is showing the radar and you still want to know what the ESP32 is doing.
+
+## Differences From The ESP32-P4 Build
+
+This branch targets a different SoC, not just a different panel, so the changes
+go deeper than a resolution swap.
+
+| | ESP32-P4 build (`main`) | This build |
+|---|---|---|
+| SoC | ESP32-P4, dual RISC-V 400 MHz, 2D PPA | ESP32-S3, dual Xtensa 240 MHz, software rendering |
+| Panel | 720x720 or 800x800 round LCD over MIPI-DSI | 466x466 CO5300 AMOLED over QSPI |
+| Panel choice | Two profiles selected at runtime from NVS | One panel, compiled in |
+| Touch | GT911 | FT3168 |
+| WiFi | `esp_wifi_remote` + `esp_hosted` via an ESP32-C6 | Native `esp_wifi` |
+| PSRAM | 32 MB hex | 8 MB octal |
+| GPS | USB CDC NMEA on the USB-A host port | Not available; compiled out |
+| Audio / PMIC | ES8311 codec, AXP2101 | Neither is fitted |
+
+Things worth knowing if you are working on this branch:
+
+- **Touch comes up after the display, always.** The FT3168 has no reset line of
+  its own; it is tied to the panel reset on GPIO 21 and does not answer on I2C
+  until the panel has been initialised. `bsp_display_start_with_config()` brings
+  the panel up before the touch controller for that reason.
+- **The FT3168 driver is part of this repository.** There is no FT3168 driver in
+  the ESP component registry. It shares the FocalTech touch data layout with the
+  FT5x06 family, but `espressif/esp_lcd_touch_ft5x06` cannot be reused: its init
+  writes FT5x06 threshold registers the FT3168 does not implement, and it never
+  brings the controller out of its default monitor mode, so the chip ACKs every
+  read while reporting zero touch points forever.
+- **Audio is removed rather than disabled.** The 1.75-inch sibling board's I2S
+  BCLK and DIN are GPIO 9 and 10, which on this board are the panel's QSPI CS
+  and SCLK. Leaving audio enabled here would drive the panel's own bus lines.
+- **Layout constants are fixed, not scaled.** 466 is 65% of 720 linearly, but
+  hit targets have a fingertip floor and text has a legibility floor, so the
+  chrome dimensions in `main/core/RadarTypes.hpp` were re-chosen for this panel
+  rather than multiplied through. Menus are centred because an off-centre box on
+  a round panel loses its corners to the bezel.
+- **Internal RAM is the scarce resource**, not PSRAM, and it is shared between
+  the LVGL draw buffers and WiFi. Three settings were tuned against the board
+  rather than guessed, and each comment in `sdkconfig.defaults` says what it
+  costs: `LV_ATTRIBUTE_FAST_MEM_USE_IRAM`, `SPIRAM_FETCH_INSTRUCTIONS` and
+  `SPIRAM_RODATA` are off, and WiFi's IRAM optimisations are disabled with its
+  static RX buffers reduced. At stock WiFi settings `esp_wifi_init()` fails with
+  `ESP_ERR_NO_MEM` and panics the board into a boot loop. The firmware logs free
+  internal heap at startup for exactly this reason; it currently reports about
+  220 KB free with a 116 KB largest block.
+- **The LVGL draw buffers must be in internal RAM, not PSRAM.** PSRAM buffers
+  fail two different ways: without `psram_dma_direct` on the panel IO, every
+  flush tries to allocate an internal bounce buffer and fails once WiFi is up
+  (`setup_dma_priv_buffer: Failed to allocate priv TX buffer`); with it, the DMA
+  reads PSRAM directly but cannot keep the SPI FIFO fed while WiFi is also using
+  PSRAM (`DMA TX underflow detected`). They are small on purpose --
+  `BSP_DISPLAY_LVGL_BUF_HEIGHT` trades directly against WiFi.
+- **Internal RAM runs out long before PSRAM does, and contiguity binds before
+  capacity.** Three P4 assumptions had to go: task stacks in PSRAM (see below),
+  `SPIRAM_MALLOC_ALWAYSINTERNAL=1024` (which forced the radar's hundreds of
+  ~300-byte LVGL objects into internal RAM, leaving ~15 KB free with PSRAM 85%
+  empty), and mbedTLS allocating internally. The last one mattered most for
+  stability: TLS handshakes fragment internal heap, and after a burst of them
+  the largest free block fell from 29 KB to 14 KB and never recovered, so the
+  aircraft fetch's own headroom check latched off and the radar stopped updating
+  until reboot -- with 34 KB still free. `MBEDTLS_EXTERNAL_MEM_ALLOC` plus
+  thresholds recalibrated in `RadarHttpClient.cpp` fixed it; the largest block
+  now holds steady around 30 KB.
+- **Task stacks must be in internal RAM** (`BOARD_TASK_STACK_CAPS`). Flash and
+  PSRAM share one cache on the S3, so a flash operation stops a PSRAM-stacked
+  task dead; IDF asserts on it. The P4 build puts every task stack in PSRAM,
+  which is safe there because flash and PSRAM have separate controllers.
+- **The FT3168 NAKs one status read about every 13.4 seconds**, on a cadence
+  steady to within 40 ms, which is its own periodic self-calibration and not a
+  bus problem. The driver drops that poll rather than reporting a fault, and
+  only warns after a run of consecutive failures.
+- **Physical controls have no default pins.** The ESP32-P4 defaults (GPIO 30/46/
+  47/52/48) are wrong here: 52 does not exist on an ESP32-S3, and 47/48 are the
+  I2C bus shared by touch, the IMU and the RTC.
 
 ## Useful Commands
 
@@ -513,7 +585,7 @@ Commit these files:
 - Data under `data/`
 - Generators under `tools/`
 - `components/bsp_extra/`
-- `components/waveshare__esp32_p4_wifi6_touch_lcd_xc/`
+- `components/waveshare__esp32_s3_touch_amoled_143/`
 - `main/idf_component.yml`
 - `dependencies.lock`
 - `sdkconfig`

@@ -76,4 +76,4 @@ idf_component_register(
         ui
         wifi
         ${CMAKE_CURRENT_BINARY_DIR}
-    REQUIRES esp_event esp_http_client esp_http_server esp_netif esp_wifi espressif__libpng espressif__usb_host_cdc_acm espressif__zlib json mbedtls nvs_flash waveshare__esp32_p4_wifi6_touch_lcd_xc)
+    REQUIRES esp_event esp_http_client esp_http_server esp_netif esp_wifi espressif__libpng espressif__zlib json mbedtls nvs_flash waveshare__esp32_s3_touch_amoled_143)

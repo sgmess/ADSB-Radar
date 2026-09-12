@@ -350,7 +350,7 @@ bool CaptivePortal::startDnsServer()
     owner->portal_dns_running = true;
     if (xTaskCreateWithCaps(RadarApp::dns_server_task_entry, "portal_dns", DNS_TASK_STACK, owner,
                             DNS_TASK_PRIORITY, &owner->portal_dns_task_handle,
-                            MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) != pdPASS) {
+                            BOARD_TASK_STACK_CAPS) != pdPASS) {
         owner->portal_dns_running = false;
         owner->portal_dns_task_handle = NULL;
         return false;

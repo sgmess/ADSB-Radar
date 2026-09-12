@@ -65,15 +65,6 @@ enum {
 static constexpr uint32_t ROTARY_POLL_MS = 2;
 
 RadarApp *RadarApp::active_app = nullptr;
-int radar_screen_w = 720;
-int radar_screen_h = 720;
-int radar_size = 700;
-int radar_center = 350;
-int radar_radius = 330;
-int radar_bg_radius = 350;
-int radar_y = 10;
-int control_arc_radius = 344;
-int heading_label_radius = 302;
 
 /* Draw a filled climb/descent triangle for an aircraft label marker. */
 static void trend_triangle_draw_event(lv_event_t *event)
@@ -795,8 +786,8 @@ void RadarApp::change_range_by_delta(int delta)
 lv_obj_t *RadarApp::create_range_menu_row(lv_obj_t *parent, int y, size_t index, lv_obj_t **label_out)
 {
     lv_obj_t *row = lv_obj_create(parent);
-    lv_obj_set_size(row, 248, 34);
-    lv_obj_set_pos(row, 12, y);
+    lv_obj_set_size(row, RANGE_MENU_ROW_W, RANGE_MENU_ROW_H);
+    lv_obj_set_pos(row, (RANGE_MENU_W - RANGE_MENU_ROW_W) / 2, y);
     lv_obj_set_style_bg_color(row, lv_color_hex(settings.colors.popup_border), 0);
     lv_obj_set_style_bg_opa(row, LV_OPA_10, 0);
     lv_obj_set_style_bg_color(row, lv_color_hex(settings.colors.button_pressed), LV_STATE_PRESSED);
@@ -814,7 +805,7 @@ lv_obj_t *RadarApp::create_range_menu_row(lv_obj_t *parent, int y, size_t index,
     lv_obj_t *label = make_label(row, "",
                                  configured_label_font(settings.label_styles.button, -2),
                                  settings.colors.button_text);
-    lv_obj_set_width(label, 224);
+    lv_obj_set_width(label, RANGE_MENU_ROW_W - 16);
     lv_label_set_long_mode(label, LV_LABEL_LONG_CLIP);
     lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_center(label);
@@ -828,9 +819,15 @@ lv_obj_t *RadarApp::create_range_menu_row(lv_obj_t *parent, int y, size_t index,
 /* Create the range picker popup. */
 void RadarApp::create_range_menu(lv_obj_t *screen)
 {
+    /*
+     * Ten preset rows. Centred rather than tucked under the RNG button as on the 720 profile:
+     * a box this tall placed off-centre loses its corners to the round bezel.
+     */
+    const int range_menu_h = (RANGE_MENU_PAD * 2) +
+                             (RANGE_MENU_ROW_PITCH * (MAX_RANGE_SETTINGS - 1)) + RANGE_MENU_ROW_H;
     range_menu = lv_obj_create(screen);
-    lv_obj_set_size(range_menu, 272, 426);
-    lv_obj_set_pos(range_menu, 28, 170);
+    lv_obj_set_size(range_menu, RANGE_MENU_W, range_menu_h);
+    lv_obj_set_pos(range_menu, (SCREEN_W - RANGE_MENU_W) / 2, (SCREEN_H - range_menu_h) / 2);
     lv_obj_set_style_bg_color(range_menu, lv_color_hex(settings.colors.popup_bg), 0);
     lv_obj_set_style_bg_opa(range_menu, LV_OPA_90, 0);
     lv_obj_set_style_border_color(range_menu, lv_color_hex(settings.colors.popup_border), 0);
@@ -842,7 +839,8 @@ void RadarApp::create_range_menu(lv_obj_t *screen)
     lv_obj_add_flag(range_menu, LV_OBJ_FLAG_HIDDEN);
 
     for (size_t i = 0; i < MAX_RANGE_SETTINGS; ++i) {
-        range_menu_rows[i] = create_range_menu_row(range_menu, 12 + ((int)i * 40), i,
+        range_menu_rows[i] = create_range_menu_row(range_menu,
+                                                   RANGE_MENU_PAD + ((int)i * RANGE_MENU_ROW_PITCH), i,
                                                    &range_menu_labels[i]);
     }
     refresh_range_menu();
@@ -4381,16 +4379,21 @@ void RadarApp::create_portal_overlay(lv_obj_t *screen)
     lv_obj_clear_flag(portal_overlay, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(portal_overlay, LV_OBJ_FLAG_HIDDEN);
 
-    make_overlay_label(portal_overlay, "WIFI SETUP", &lv_font_montserrat_26,
-                       settings.colors.gps_lock, 120, 520);
+    /*
+     * Two of these lines wrap to two rows at this width, which is why the vertical steps below
+     * are uneven rather than a constant pitch.
+     */
+    make_overlay_label(portal_overlay, "WIFI SETUP", &lv_font_montserrat_20,
+                       settings.colors.gps_lock, 84, PORTAL_TEXT_W);
     make_overlay_label(portal_overlay, "On your phone or computer, connect to this network:",
-                       &lv_font_montserrat_16, settings.colors.sweep, 184, 540);
-    portal_ap_label = make_overlay_label(portal_overlay, setup_ap_ssid, &lv_font_montserrat_22,
-                                         settings.colors.button_text, 238, 520);
+                       &lv_font_montserrat_14, settings.colors.sweep, 124, PORTAL_TEXT_W);
+    portal_ap_label = make_overlay_label(portal_overlay, setup_ap_ssid, &lv_font_montserrat_18,
+                                         settings.colors.button_text, 176, PORTAL_TEXT_W);
     make_overlay_label(portal_overlay, "Then open http://192.168.4.1 and save your WiFi details.",
-                       &lv_font_montserrat_16, settings.colors.text_primary, 302, 560);
+                       &lv_font_montserrat_14, settings.colors.text_primary, 222, PORTAL_TEXT_W);
     portal_status_label = make_overlay_label(portal_overlay, "Starting setup network",
-                                             &lv_font_montserrat_16, settings.colors.button_status, 386, 540);
+                                             &lv_font_montserrat_14, settings.colors.button_status,
+                                             288, PORTAL_TEXT_W);
 }
 
 /* Create one row in the WiFi menu with a label and click callback. */
@@ -4398,8 +4401,8 @@ lv_obj_t *RadarApp::create_wifi_menu_row(lv_obj_t *parent, int y, const char *te
                                          lv_event_cb_t cb, lv_obj_t **label_out)
 {
     lv_obj_t *row = lv_obj_create(parent);
-    lv_obj_set_size(row, 248, 38);
-    lv_obj_set_pos(row, 12, y);
+    lv_obj_set_size(row, WIFI_MENU_ROW_W, WIFI_MENU_ROW_H);
+    lv_obj_set_pos(row, (WIFI_MENU_W - WIFI_MENU_ROW_W) / 2, y);
     lv_obj_set_style_bg_color(row, lv_color_hex(settings.colors.popup_border), 0);
     lv_obj_set_style_bg_opa(row, LV_OPA_10, 0);
     lv_obj_set_style_bg_color(row, lv_color_hex(settings.colors.button_pressed), LV_STATE_PRESSED);
@@ -4416,7 +4419,7 @@ lv_obj_t *RadarApp::create_wifi_menu_row(lv_obj_t *parent, int y, const char *te
     lv_obj_t *label = make_label(row, text,
                                  configured_label_font(settings.label_styles.button),
                                  settings.colors.button_text);
-    lv_obj_set_width(label, 226);
+    lv_obj_set_width(label, WIFI_MENU_ROW_W - 16);
     lv_label_set_long_mode(label, LV_LABEL_LONG_CLIP);
     lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_center(label);
@@ -4430,9 +4433,16 @@ lv_obj_t *RadarApp::create_wifi_menu_row(lv_obj_t *parent, int y, const char *te
 /* Create the WiFi menu containing IP, WiFi setup, reboot, and NVS clear actions. */
 void RadarApp::create_wifi_menu(lv_obj_t *screen)
 {
+    /*
+     * Four rows, anchored just above the WIFI button that opens it. The 720 profile hardcoded
+     * y=448; here the menu is measured off the bottom so it clears the bezel control rather
+     * than running past the bottom of a much shorter screen.
+     */
+    const int wifi_menu_h = (WIFI_MENU_PAD * 2) + (WIFI_MENU_ROW_PITCH * 3) + WIFI_MENU_ROW_H;
+    const int wifi_menu_y = SCREEN_H - CONTROL_BUTTON_H - 16 - wifi_menu_h;
     wifi_menu = lv_obj_create(screen);
-    lv_obj_set_size(wifi_menu, 272, 204);
-    lv_obj_set_pos(wifi_menu, (SCREEN_W - 272) / 2, 448);
+    lv_obj_set_size(wifi_menu, WIFI_MENU_W, wifi_menu_h);
+    lv_obj_set_pos(wifi_menu, (SCREEN_W - WIFI_MENU_W) / 2, wifi_menu_y);
     lv_obj_set_style_bg_color(wifi_menu, lv_color_hex(settings.colors.popup_bg), 0);
     lv_obj_set_style_bg_opa(wifi_menu, LV_OPA_90, 0);
     lv_obj_set_style_border_color(wifi_menu, lv_color_hex(settings.colors.popup_border), 0);
@@ -4443,18 +4453,20 @@ void RadarApp::create_wifi_menu(lv_obj_t *screen)
     lv_obj_clear_flag(wifi_menu, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(wifi_menu, LV_OBJ_FLAG_HIDDEN);
 
-    wifi_menu_rows[0] = create_wifi_menu_row(wifi_menu, 10, "IP --",
+#define WIFI_MENU_ROW_Y(index) (WIFI_MENU_PAD + ((index) * WIFI_MENU_ROW_PITCH))
+    wifi_menu_rows[0] = create_wifi_menu_row(wifi_menu, WIFI_MENU_ROW_Y(0), "IP --",
                                              RadarApp::wifi_menu_ip_event_entry,
                                              &wifi_menu_ip_label);
-    wifi_menu_rows[1] = create_wifi_menu_row(wifi_menu, 56, "CHANGE WIFI",
+    wifi_menu_rows[1] = create_wifi_menu_row(wifi_menu, WIFI_MENU_ROW_Y(1), "CHANGE WIFI",
                                              RadarApp::wifi_menu_setup_event_entry,
                                              &wifi_menu_change_label);
-    wifi_menu_rows[2] = create_wifi_menu_row(wifi_menu, 102, "REBOOT ESP32",
+    wifi_menu_rows[2] = create_wifi_menu_row(wifi_menu, WIFI_MENU_ROW_Y(2), "REBOOT ESP32",
                                              RadarApp::wifi_menu_reboot_event_entry,
                                              &wifi_menu_reboot_label);
-    wifi_menu_rows[3] = create_wifi_menu_row(wifi_menu, 148, "CLEAR NVS",
+    wifi_menu_rows[3] = create_wifi_menu_row(wifi_menu, WIFI_MENU_ROW_Y(3), "CLEAR NVS",
                                              RadarApp::wifi_menu_clear_nvs_event_entry,
                                              &wifi_menu_clear_nvs_label);
+#undef WIFI_MENU_ROW_Y
 }
 
 /* Create one row in the DATA menu and attach its action identifier. */
@@ -4462,8 +4474,8 @@ lv_obj_t *RadarApp::create_data_menu_row(lv_obj_t *parent, int y, const char *te
                                          intptr_t action, lv_obj_t **label_out)
 {
     lv_obj_t *row = lv_obj_create(parent);
-    lv_obj_set_size(row, 320, 36);
-    lv_obj_set_pos(row, 12, y);
+    lv_obj_set_size(row, DATA_MENU_ROW_W, DATA_MENU_ROW_H);
+    lv_obj_set_pos(row, (DATA_MENU_W - DATA_MENU_ROW_W) / 2, y);
     lv_obj_set_style_bg_color(row, lv_color_hex(settings.colors.popup_border), 0);
     lv_obj_set_style_bg_opa(row, LV_OPA_10, 0);
     lv_obj_set_style_bg_color(row, lv_color_hex(settings.colors.button_pressed), LV_STATE_PRESSED);
@@ -4481,7 +4493,7 @@ lv_obj_t *RadarApp::create_data_menu_row(lv_obj_t *parent, int y, const char *te
     lv_obj_t *label = make_label(row, text,
                                  configured_label_font(settings.label_styles.button, -2),
                                  settings.colors.button_text);
-    lv_obj_set_width(label, 296);
+    lv_obj_set_width(label, DATA_MENU_ROW_W - 24);
     lv_label_set_long_mode(label, LV_LABEL_LONG_CLIP);
     lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_LEFT, 0);
     lv_obj_align(label, LV_ALIGN_LEFT_MID, 12, 0);
@@ -4495,9 +4507,15 @@ lv_obj_t *RadarApp::create_data_menu_row(lv_obj_t *parent, int y, const char *te
 /* Create the DATA menu containing filters and display toggles. */
 void RadarApp::create_data_menu(lv_obj_t *screen)
 {
+    /*
+     * Three filter rows, then a gap, then five toggle rows. The gap is what separates "which
+     * aircraft" from "what to draw", so it survives the shrink even though it costs height.
+     */
+    const int data_menu_h = (DATA_MENU_PAD * 2) + DATA_MENU_GROUP_GAP +
+                            (DATA_MENU_ROW_PITCH * 7) + DATA_MENU_ROW_H;
     data_menu = lv_obj_create(screen);
-    lv_obj_set_size(data_menu, 344, 374);
-    lv_obj_set_pos(data_menu, (SCREEN_W - 344) / 2, 160);
+    lv_obj_set_size(data_menu, DATA_MENU_W, data_menu_h);
+    lv_obj_set_pos(data_menu, (SCREEN_W - DATA_MENU_W) / 2, (SCREEN_H - data_menu_h) / 2);
     lv_obj_set_style_bg_color(data_menu, lv_color_hex(settings.colors.popup_bg), 0);
     lv_obj_set_style_bg_opa(data_menu, LV_OPA_90, 0);
     lv_obj_set_style_border_color(data_menu, lv_color_hex(settings.colors.popup_border), 0);
@@ -4508,31 +4526,36 @@ void RadarApp::create_data_menu(lv_obj_t *screen)
     lv_obj_clear_flag(data_menu, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(data_menu, LV_OBJ_FLAG_HIDDEN);
 
+#define DATA_MENU_FILTER_Y(index) (DATA_MENU_PAD + ((index) * DATA_MENU_ROW_PITCH))
+#define DATA_MENU_TOGGLE_Y(index) (DATA_MENU_PAD + DATA_MENU_GROUP_GAP + \
+                                   (((index) + 3) * DATA_MENU_ROW_PITCH))
     data_menu_rows[DATA_MENU_FILTER_ALL] =
-        create_data_menu_row(data_menu, 12, "ALL AIRCRAFT",
+        create_data_menu_row(data_menu, DATA_MENU_FILTER_Y(0), "ALL AIRCRAFT",
                              DATA_MENU_FILTER_ALL, &data_menu_labels[DATA_MENU_FILTER_ALL]);
     data_menu_rows[DATA_MENU_FILTER_MILITARY] =
-        create_data_menu_row(data_menu, 58, "MILITARY AIRCRAFT",
+        create_data_menu_row(data_menu, DATA_MENU_FILTER_Y(1), "MILITARY AIRCRAFT",
                              DATA_MENU_FILTER_MILITARY, &data_menu_labels[DATA_MENU_FILTER_MILITARY]);
     data_menu_rows[DATA_MENU_FILTER_INTERESTING] =
-        create_data_menu_row(data_menu, 104, "INTERESTING AIRCRAFT",
+        create_data_menu_row(data_menu, DATA_MENU_FILTER_Y(2), "INTERESTING AIRCRAFT",
                              DATA_MENU_FILTER_INTERESTING, &data_menu_labels[DATA_MENU_FILTER_INTERESTING]);
     data_menu_rows[DATA_MENU_TOGGLE_HEADING] =
-        create_data_menu_row(data_menu, 158, "HEADING",
+        create_data_menu_row(data_menu, DATA_MENU_TOGGLE_Y(0), "HEADING",
                              DATA_MENU_TOGGLE_HEADING, &data_menu_labels[DATA_MENU_TOGGLE_HEADING]);
     data_menu_rows[DATA_MENU_TOGGLE_AIRPORTS] =
-        create_data_menu_row(data_menu, 204, "AIRPORTS",
+        create_data_menu_row(data_menu, DATA_MENU_TOGGLE_Y(1), "AIRPORTS",
                              DATA_MENU_TOGGLE_AIRPORTS, &data_menu_labels[DATA_MENU_TOGGLE_AIRPORTS]);
     data_menu_rows[DATA_MENU_TOGGLE_COUNTRIES] =
-        create_data_menu_row(data_menu, 250, "COUNTRIES",
+        create_data_menu_row(data_menu, DATA_MENU_TOGGLE_Y(2), "COUNTRIES",
                              DATA_MENU_TOGGLE_COUNTRIES, &data_menu_labels[DATA_MENU_TOGGLE_COUNTRIES]);
     data_menu_rows[DATA_MENU_TOGGLE_RUNWAYS] =
-        create_data_menu_row(data_menu, 296, "RUNWAYS",
+        create_data_menu_row(data_menu, DATA_MENU_TOGGLE_Y(3), "RUNWAYS",
                              DATA_MENU_TOGGLE_RUNWAYS, &data_menu_labels[DATA_MENU_TOGGLE_RUNWAYS]);
     data_menu_rows[DATA_MENU_TOGGLE_GROUND_AIRCRAFT] =
-        create_data_menu_row(data_menu, 338, "GROUND A/C",
+        create_data_menu_row(data_menu, DATA_MENU_TOGGLE_Y(4), "GROUND A/C",
                              DATA_MENU_TOGGLE_GROUND_AIRCRAFT,
                              &data_menu_labels[DATA_MENU_TOGGLE_GROUND_AIRCRAFT]);
+#undef DATA_MENU_FILTER_Y
+#undef DATA_MENU_TOGGLE_Y
     refresh_data_menu();
 }
 
@@ -4572,20 +4595,21 @@ void RadarApp::create_radar_ui(void)
         notification_labels[i] = make_label(radar, "",
                                             configured_label_font(settings.label_styles.notification),
                                             settings.notifications[i].color);
-        lv_obj_set_width(notification_labels[i], 520);
+        lv_obj_set_width(notification_labels[i], NOTIFICATION_LABEL_W);
         lv_label_set_long_mode(notification_labels[i], LV_LABEL_LONG_CLIP);
         lv_obj_set_style_text_align(notification_labels[i], LV_TEXT_ALIGN_CENTER, 0);
-        lv_obj_align(notification_labels[i], LV_ALIGN_TOP_MID, 0, 42 + ((int)i * 20));
+        lv_obj_align(notification_labels[i], LV_ALIGN_TOP_MID, 0,
+                     NOTIFICATION_LABEL_TOP + ((int)i * NOTIFICATION_LABEL_PITCH));
         lv_obj_add_flag(notification_labels[i], LV_OBJ_FLAG_HIDDEN);
     }
 
     gps_status_label = make_label(radar, "",
                                   configured_label_font(settings.label_styles.gps),
                                   settings.colors.gps_neutral);
-    lv_obj_set_width(gps_status_label, 150);
+    lv_obj_set_width(gps_status_label, 120);
     lv_label_set_long_mode(gps_status_label, LV_LABEL_LONG_CLIP);
     lv_obj_set_style_text_align(gps_status_label, LV_TEXT_ALIGN_LEFT, 0);
-    lv_obj_set_pos(gps_status_label, 92, 42);
+    lv_obj_set_pos(gps_status_label, 74, 30);
     lv_obj_add_flag(gps_status_label, LV_OBJ_FLAG_HIDDEN);
 
     sweep_overlay = lv_obj_create(radar);
@@ -4601,26 +4625,49 @@ void RadarApp::create_radar_ui(void)
     create_aircraft_markers(radar);
     create_radar_touch_layer(radar);
 
-    int range_x = 42;
-    int range_y = SCREEN_H - 128;
-    make_curved_button(screen, &range_button, 212, 248,
-                       range_x, range_y, CONTROL_BUTTON_W, CONTROL_BUTTON_H,
-                       "RNG --", NULL, settings.colors.button_text);
-    const int range_side_hitbox_size = 76;
-    const int range_middle_hitbox_size = 86;
-    auto position_range_arc_hitbox = [](lv_obj_t *obj, int degrees, int size) {
+    /*
+     * Place every bezel control from its arc angle rather than from a screen corner. The 720x720
+     * profile used hand-tuned x/y pairs, but at 466 the margins those encoded are smaller than
+     * the buttons' own rounded ends, so a corner-relative position runs off the panel. Deriving
+     * from the arc also puts the hit target under the caption, which CurvedButtonController
+     * draws at the same angle.
+     */
+    /*
+     * These boxes are allowed to overhang the round bezel -- the 720 profile's did too, and LVGL
+     * clips the off-circle part -- but they must stay inside the framebuffer, or the part of the
+     * target that runs past it is simply unreachable. Clamping reproduces by construction what
+     * the 720 layout did by hand: the bottom-centre button gets pulled in off the arc, because
+     * that is where a wide box meets the panel edge soonest.
+     */
+    auto arc_button_x = [](int degrees, int w) {
         float radians = ((float)degrees - 90.0f) * PI_F / 180.0f;
-        int center_x = (SCREEN_W / 2) + (int)lroundf(cosf(radians) * (float)CONTROL_ARC_RADIUS);
-        int center_y = (SCREEN_H / 2) + (int)lroundf(sinf(radians) * (float)CONTROL_ARC_RADIUS);
-        lv_obj_set_size(obj, size, size);
-        lv_obj_set_pos(obj, center_x - (size / 2), center_y - (size / 2));
+        int center = (SCREEN_W / 2) + (int)lroundf(cosf(radians) * (float)CONTROL_ARC_RADIUS);
+        return clamp_int(center - (w / 2), 0, SCREEN_W - w);
+    };
+    auto arc_button_y = [](int degrees, int h) {
+        float radians = ((float)degrees - 90.0f) * PI_F / 180.0f;
+        int center = (SCREEN_H / 2) + (int)lroundf(sinf(radians) * (float)CONTROL_ARC_RADIUS);
+        return clamp_int(center - (h / 2), 0, SCREEN_H - h);
+    };
+    auto position_on_arc = [&](lv_obj_t *obj, int degrees, int w, int h) {
+        lv_obj_set_size(obj, w, h);
+        lv_obj_set_pos(obj, arc_button_x(degrees, w), arc_button_y(degrees, h));
+    };
+
+    make_curved_button(screen, &range_button, 212, 248,
+                       arc_button_x(RANGE_BUTTON_ARC_MID, CONTROL_BUTTON_W),
+                       arc_button_y(RANGE_BUTTON_ARC_MID, CONTROL_BUTTON_H),
+                       CONTROL_BUTTON_W, CONTROL_BUTTON_H,
+                       "RNG --", NULL, settings.colors.button_text);
+    auto position_range_arc_hitbox = [&](lv_obj_t *obj, int degrees, int size) {
+        position_on_arc(obj, degrees, size, size);
     };
     range_button_left_hitbox = lv_obj_create(screen);
-    position_range_arc_hitbox(range_button_left_hitbox, 254, range_side_hitbox_size);
+    position_range_arc_hitbox(range_button_left_hitbox, RANGE_STEP_DOWN_DEG, RANGE_STEP_HITBOX_SIZE);
     lv_obj_set_style_bg_opa(range_button_left_hitbox, LV_OPA_TRANSP, 0);
     lv_obj_set_style_bg_color(range_button_left_hitbox, lv_color_hex(settings.colors.button_pressed), LV_STATE_PRESSED);
     lv_obj_set_style_bg_opa(range_button_left_hitbox, LV_OPA_40, LV_STATE_PRESSED);
-    lv_obj_set_style_radius(range_button_left_hitbox, range_side_hitbox_size / 2, 0);
+    lv_obj_set_style_radius(range_button_left_hitbox, RANGE_STEP_HITBOX_SIZE / 2, 0);
     lv_obj_set_style_border_width(range_button_left_hitbox, 0, 0);
     lv_obj_set_style_pad_all(range_button_left_hitbox, 0, 0);
     lv_obj_clear_flag(range_button_left_hitbox, LV_OBJ_FLAG_SCROLLABLE);
@@ -4629,11 +4676,11 @@ void RadarApp::create_radar_ui(void)
                         LV_EVENT_CLICKED, (void *)(intptr_t)-1);
 
     range_button_middle_hitbox = lv_obj_create(screen);
-    position_range_arc_hitbox(range_button_middle_hitbox, 230, range_middle_hitbox_size);
+    position_range_arc_hitbox(range_button_middle_hitbox, RANGE_PICK_DEG, RANGE_PICK_HITBOX_SIZE);
     lv_obj_set_style_bg_opa(range_button_middle_hitbox, LV_OPA_TRANSP, 0);
     lv_obj_set_style_bg_color(range_button_middle_hitbox, lv_color_hex(settings.colors.button_pressed), LV_STATE_PRESSED);
     lv_obj_set_style_bg_opa(range_button_middle_hitbox, LV_OPA_40, LV_STATE_PRESSED);
-    lv_obj_set_style_radius(range_button_middle_hitbox, range_middle_hitbox_size / 2, 0);
+    lv_obj_set_style_radius(range_button_middle_hitbox, RANGE_PICK_HITBOX_SIZE / 2, 0);
     lv_obj_set_style_border_width(range_button_middle_hitbox, 0, 0);
     lv_obj_set_style_pad_all(range_button_middle_hitbox, 0, 0);
     lv_obj_clear_flag(range_button_middle_hitbox, LV_OBJ_FLAG_SCROLLABLE);
@@ -4642,11 +4689,11 @@ void RadarApp::create_radar_ui(void)
                         LV_EVENT_CLICKED, (void *)(intptr_t)0);
 
     range_button_right_hitbox = lv_obj_create(screen);
-    position_range_arc_hitbox(range_button_right_hitbox, 206, range_side_hitbox_size);
+    position_range_arc_hitbox(range_button_right_hitbox, RANGE_STEP_UP_DEG, RANGE_STEP_HITBOX_SIZE);
     lv_obj_set_style_bg_opa(range_button_right_hitbox, LV_OPA_TRANSP, 0);
     lv_obj_set_style_bg_color(range_button_right_hitbox, lv_color_hex(settings.colors.button_pressed), LV_STATE_PRESSED);
     lv_obj_set_style_bg_opa(range_button_right_hitbox, LV_OPA_40, LV_STATE_PRESSED);
-    lv_obj_set_style_radius(range_button_right_hitbox, range_side_hitbox_size / 2, 0);
+    lv_obj_set_style_radius(range_button_right_hitbox, RANGE_STEP_HITBOX_SIZE / 2, 0);
     lv_obj_set_style_border_width(range_button_right_hitbox, 0, 0);
     lv_obj_set_style_pad_all(range_button_right_hitbox, 0, 0);
     lv_obj_clear_flag(range_button_right_hitbox, LV_OBJ_FLAG_SCROLLABLE);
@@ -4654,11 +4701,13 @@ void RadarApp::create_radar_ui(void)
     lv_obj_add_event_cb(range_button_right_hitbox, RadarApp::range_button_event_entry,
                         LV_EVENT_CLICKED, (void *)(intptr_t)1);
     make_curved_button(screen, &wifi_button, 162, 198,
-                       (SCREEN_W - CONTROL_BUTTON_W) / 2, SCREEN_H - 70,
+                       arc_button_x(WIFI_BUTTON_ARC_MID, CONTROL_BUTTON_W),
+                       arc_button_y(WIFI_BUTTON_ARC_MID, CONTROL_BUTTON_H),
                        CONTROL_BUTTON_W, CONTROL_BUTTON_H,
                        "WIFI WAIT", RadarApp::wifi_button_event_entry, settings.colors.button_text);
     make_curved_button(screen, &status_button, 112, 148,
-                       SCREEN_W - 42 - CONTROL_BUTTON_W, SCREEN_H - 128,
+                       arc_button_x(STATUS_BUTTON_ARC_MID, CONTROL_BUTTON_W),
+                       arc_button_y(STATUS_BUTTON_ARC_MID, CONTROL_BUTTON_H),
                        CONTROL_BUTTON_W, CONTROL_BUTTON_H,
                        "DATA START", RadarApp::status_button_event_entry, settings.colors.button_status);
 
@@ -4707,35 +4756,43 @@ void RadarApp::run()
     init_nvs();
     init_json_allocator();
     settings.load();
-    bsp_display_set_runtime_lcd_type(settings.display_type == RADAR_DISPLAY_TYPE_800_800_3_4_INCH ?
-                                     BSP_RUNTIME_LCD_TYPE_800_800_3_4_INCH :
-                                     BSP_RUNTIME_LCD_TYPE_720_720_4_INCH);
-    radar_screen_w = BSP_LCD_H_RES;
-    radar_screen_h = BSP_LCD_V_RES;
-    radar_size = radar_screen_w < radar_screen_h ? radar_screen_w - 20 : radar_screen_h - 20;
-    if (radar_size < 700) {
-        radar_size = 700;
-    }
-    radar_center = radar_size / 2;
-    radar_bg_radius = radar_center;
-    radar_radius = radar_center - 20;
-    radar_y = 10;
-    control_arc_radius = radar_radius + 14;
-    heading_label_radius = radar_radius - 28;
-    ESP_LOGI(TAG, "Selected display profile: %dx%d", radar_screen_w, radar_screen_h);
+    /*
+     * Single fixed panel on this board, so the geometry is compile-time. The build would not
+     * link against the wrong panel size: RadarTypes.hpp derives SCREEN_W from BoardConfig.hpp
+     * and this check catches a BSP whose resolution has drifted away from it.
+     */
+    static_assert(SCREEN_W == BSP_LCD_H_RES && SCREEN_H == BSP_LCD_V_RES,
+                  "BoardConfig panel size does not match the BSP");
+    ESP_LOGI(TAG, "Display profile: %dx%d", SCREEN_W, SCREEN_H);
     set_range_to_default();
     init_aircraft_storage();
 
     bsp_display_cfg_t cfg = {};
     cfg.lv_adapter_cfg = ESP_LV_ADAPTER_DEFAULT_CONFIG();
     cfg.rotation = ESP_LV_ADAPTER_ROTATE_0;
-    cfg.tear_avoid_mode = ESP_LV_ADAPTER_TEAR_AVOID_MODE_TRIPLE_PARTIAL;
+    /*
+     * The triple-partial mode needs the DSI panel's own frame buffers; this QSPI panel has no
+     * equivalent, so the adapter flushes directly and tearing is avoided by the CO5300's TE
+     * line instead.
+     */
+    cfg.tear_avoid_mode = ESP_LV_ADAPTER_TEAR_AVOID_MODE_NONE;
     cfg.touch_flags.swap_xy = 0;
     cfg.touch_flags.mirror_x = 0;
     cfg.touch_flags.mirror_y = 0;
 
     bsp_display_start_with_config(&cfg);
     bsp_display_backlight_on();
+
+    /*
+     * Internal RAM is the binding resource on this board, and the LVGL draw buffers come out of
+     * it. WiFi is initialised after this point and needs roughly 50 KB of its own, so a small
+     * figure here is the early warning for an esp_wifi_init() that fails with ESP_ERR_NO_MEM
+     * and panics into a boot loop.
+     */
+    ESP_LOGI(TAG, "Heap after display start: internal %u free (%u largest block), PSRAM %u free",
+             (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+             (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL),
+             (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
     oled_status.init((uint8_t)settings.hardware_oled_i2c_addr);
     hardware_controls.initInputs();
 
@@ -4746,12 +4803,12 @@ void RadarApp::run()
     gps.start();
     xTaskCreatePinnedToCoreWithCaps(RadarApp::aircraft_fetch_task_entry, "aircraft_fetch",
                                     FETCH_TASK_STACK, this, FETCH_TASK_PRIORITY, NULL,
-                                    FETCH_TASK_CORE, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+                                    FETCH_TASK_CORE, BOARD_TASK_STACK_CAPS);
     xTaskCreatePinnedToCoreWithCaps(RadarApp::airport_weather_task_entry, "airport_weather",
                                     AIRPORT_WEATHER_TASK_STACK, this,
                                     AIRPORT_WEATHER_TASK_PRIORITY, NULL,
                                     AIRPORT_WEATHER_TASK_CORE,
-                                    MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+                                    BOARD_TASK_STACK_CAPS);
 }
 
 /* ESP-IDF entry point; keep the application static so callbacks can reference it. */

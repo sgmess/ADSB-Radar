@@ -282,7 +282,6 @@ extern const char SETTINGS_PAGE_HTML[] = R"HTML(<!doctype html>
             <label class="form-label">Radar centre source</label>
             <select id="centerSource" class="form-select visually-hidden" aria-label="Radar centre source">
               <option value="manual">Manual position</option>
-              <option value="gps">USB GPS</option>
               <option value="airport">Airport</option>
               <option value="location">Search by location</option>
             </select>
@@ -294,15 +293,6 @@ extern const char SETTINGS_PAGE_HTML[] = R"HTML(<!doctype html>
                     <div><h3>Manual</h3><p>Click the map or enter exact coordinates.</p></div>
                   </div>
                   <input class="form-check-input" name="locationSourceCard" type="radio" value="manual" id="sourceManual" aria-label="Use manual position">
-                </div>
-              </div>
-              <div class="location-source" data-source="gps">
-                <div class="source-top">
-                  <div class="d-flex gap-3">
-                    <div class="source-icon"><i class="bi bi-usb-symbol"></i></div>
-                    <div><h3>USB GPS</h3><p>Use the current GPS fix from the USB receiver.</p></div>
-                  </div>
-                  <input class="form-check-input" name="locationSourceCard" type="radio" value="gps" id="sourceGps" aria-label="Use USB GPS">
                 </div>
               </div>
               <div class="location-source" data-source="airport">
@@ -328,11 +318,6 @@ extern const char SETTINGS_PAGE_HTML[] = R"HTML(<!doctype html>
               <div class="col-md-6"><label class="form-label">Latitude</label><input id="lat" type="number" step="0.000001" class="form-control"></div>
               <div class="col-md-6"><label class="form-label">Longitude</label><input id="lon" type="number" step="0.000001" class="form-control"></div>
               <div class="col-md-12"><label class="form-label">Startup range</label><select id="defaultRange" class="form-select"></select></div>
-            </div>
-            <div id="gpsStatusBox" class="alert alert-secondary mt-4 mb-0">
-              <div class="fw-semibold" id="gpsStatus">GPS status unknown</div>
-              <div id="gpsDetail" class="small"></div>
-              <button id="copyGpsToManual" class="btn btn-sm btn-outline-primary mt-2" type="button" disabled>Copy GPS to manual</button>
             </div>
             <div id="airportBox" class="mt-4">
               <label class="form-label" for="airportSearch">Airport centre</label>
@@ -675,7 +660,7 @@ extern const char SETTINGS_PAGE_HTML[] = R"HTML(<!doctype html>
             <div class="col-12">
               <div class="dashboard-section">
                 <h2 class="h5 mb-2">GPS</h2>
-                <div id="gpsStatusDetail" class="row g-3"></div>
+                <div class="alert alert-secondary mb-0">USB GPS is not available on the ESP32-S3-Touch-AMOLED-1.43: the board has no USB-A host port and no switchable VBUS, so a CDC GPS dongle cannot be powered or enumerated. Set the radar centre manually, by airport, or by place search.</div>
               </div>
             </div>
             <div class="col-12">
@@ -778,7 +763,7 @@ extern const char SETTINGS_PAGE_HTML[] = R"HTML(<!doctype html>
 <script src="https://cdn.datatables.net/v/bs5/dt-2.1.8/rg-1.5.0/datatables.min.js"></script>
 <script>
 const SETTINGS_EXPORT_VERSION=1;
-let cfg=null, defaults=null, selectedAirport=null, selectedLocation=null, latestGps=null, airportOptions={}, airportTimer=null, locationResults=[], aircraftTable=null, locationMap=null, locationMarker=null;
+let cfg=null, defaults=null, selectedAirport=null, selectedLocation=null, airportOptions={}, airportTimer=null, locationResults=[], aircraftTable=null, locationMap=null, locationMarker=null;
 	// Store the selected admin theme in the browser, not in device settings.
 	function setCookie(name,value,days){ let maxAge=days?`; max-age=${days*86400}`:''; document.cookie=`${name}=${encodeURIComponent(value)}; path=/${maxAge}; SameSite=Lax`; }
 	// Read a named cookie value.
@@ -802,7 +787,6 @@ const styleDefs={
   aircraft_normal:{label:'Aircraft fallback'},aircraft_stale:{label:'Aircraft stale'},aircraft_low:{label:'Aircraft low fallback'},aircraft_emergency:{label:'Aircraft emergency'},aircraft_hit:{label:'Sweep highlight'},climb_triangle:{label:'Climb triangle'},descent_triangle:{label:'Descent triangle'},aircraft_heading:{label:'Aircraft heading arrows',width:true,visible:true,color:false},
   ground:{label:'Ground / altitude 0',source:'altitudeColors'},below_2000:{label:'Below 2,000 ft',source:'altitudeColors'},below_10000:{label:'2,000-9,999 ft',source:'altitudeColors'},below_20000:{label:'10,000-19,999 ft',source:'altitudeColors'},below_30000:{label:'20,000-29,999 ft',source:'altitudeColors'},below_40000:{label:'30,000-39,999 ft',source:'altitudeColors'},above_40000:{label:'40,000 ft and above',source:'altitudeColors'},
   text_primary:{label:'Primary text'},text_secondary:{label:'Secondary text'},popup_bg:{label:'Popup background'},popup_border:{label:'Popup border'},
-  gps_neutral:{label:'GPS neutral'},gps_lock:{label:'GPS lock'},gps_wait:{label:'GPS waiting'}
 };
 const labelStyleDefs={
   aircraft:{label:'Aircraft labels',help:'Callsign row size; the flight-level/speed row is drawn two points smaller.'},
@@ -812,7 +796,6 @@ const labelStyleDefs={
   airport:{label:'Airport ICAO labels'},
   button:{label:'Radar button and menu labels'},
   notification:{label:'Notification banner text'},
-  gps:{label:'GPS status text'}
 };
 const styleGroups=[
   {id:'screen',label:'Screen',keys:['screen_bg','radar_bg','radar_glow','portal_bg']},
@@ -823,7 +806,6 @@ const styleGroups=[
   {id:'aircraft',label:'Aircraft',keys:['aircraft_normal','aircraft_stale','aircraft_low','aircraft_emergency','aircraft_hit','climb_triangle','descent_triangle','aircraft_heading'],labelStyles:['aircraft','aircraft_notification']},
   {id:'altitude',label:'Altitude Colours',keys:['ground','below_2000','below_10000','below_20000','below_30000','below_40000','above_40000']},
   {id:'text',label:'Text And Popup',keys:['text_primary','text_secondary','popup_bg','popup_border'],labelStyles:['notification']},
-  {id:'gps',label:'GPS',keys:['gps_neutral','gps_lock','gps_wait'],labelStyles:['gps']}
 ];
 	// Escape text before inserting it into generated HTML fragments.
 	function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
@@ -834,7 +816,6 @@ const styleGroups=[
 	// Get the location currently represented by the active centre source.
 	function activeCentre(){
   let src=$('#centerSource').val();
-  if(src==='gps'&&latestGps&&latestGps.hasFix) return {lat:+latestGps.lat,lon:+latestGps.lon,label:'USB GPS fix',help:latestGps.status||'Using current GPS lock'};
   if(src==='airport'&&selectedAirport) return {lat:+selectedAirport.lat,lon:+selectedAirport.lon,label:selectedAirport.code?`${selectedAirport.code} - ${selectedAirport.name}`:selectedAirport.name,help:'Airport database position'};
   if(src==='location'&&selectedLocation) return {lat:+selectedLocation.lat,lon:+selectedLocation.lon,label:locationLabel(selectedLocation),help:'Place search result'};
   let manual=manualLatLng();
@@ -963,7 +944,6 @@ function withAjaxLoading(target,message,request){
 	// Populate the status tab from the live diagnostics JSON response.
 	function renderDeviceStatus(data){
   data=data||{}; let mem=data.memory||{}, wifi=data.wifi||{}, ac=data.aircraft||{}, gps=data.gps||{};
-  let gpsPosition=gps.hasFix?`${Number(gps.lat).toFixed(6)}, ${Number(gps.lon).toFixed(6)}`:'No lock';
   $('#deviceStatusSummary').html([
     metricCard('Uptime',fmtUptime(data.uptimeSec),`IDF ${data.idfVersion||'unknown'}`),
     metricCard('Internal heap',fmtBytes(mem.internal&&mem.internal.free),`Largest ${fmtBytes(mem.internal&&mem.internal.largestFree)}`),
@@ -978,12 +958,7 @@ function withAjaxLoading(target,message,request){
     `<tr><th>Total free heap</th><td colspan="4">${fmtBytes(mem.freeHeap)} <span class="text-muted">minimum ${fmtBytes(mem.minFreeHeap)}</span></td></tr>`
   ].join(''));
   $('#cacheStatusRows').html((data.caches||[]).map(cacheRow).join('')||'<tr><td colspan="3" class="text-muted">No cache data.</td></tr>');
-  $('#gpsStatusDetail').html([
-    kvCard('GPS',gps.hasFix?'Fix':(gps.deviceConnected?'Waiting':'Not connected'),gps.status||'--'),
-    kvCard('Position',gpsPosition,gps.hasFix?'Current GPS lock':'GPS position unavailable'),
-    kvCard('Satellites',String(gps.satellites||0),`${gps.sentences||0} NMEA sentences`),
-    kvCard('Detail',gps.detail||'--',gps.receiving?'Receiving GPS data':'No active GPS stream')
-  ].join(''));
+
   $('#wifiStatusDetail').html([
     kvCard('Network',wifi.ssid||'Not configured',wifi.connected?'Station connected':(wifi.portalActive?'Captive portal active':'Not connected')),
     kvCard('IP address',wifi.ip||'--',wifi.started?'WiFi driver started':'WiFi driver stopped'),
@@ -1167,9 +1142,9 @@ function renderHardwareControls(data){
   <div class="tab-content style-tab-content" id="hardwareTabContent">
     <div class="tab-pane fade show active" id="hardware-pane-display-type" role="tabpanel" aria-labelledby="hardware-tab-display-type" tabindex="0">
       <div class="display-card">
-        <div class="display-card-head"><div class="editor-card-icon"><i class="bi bi-aspect-ratio"></i></div><div><h3>Display Type</h3><p>Select the LCD fitted to this device. The saved display profile is applied after the ESP32 reboots.</p></div></div>
+        <div class="display-card-head"><div class="editor-card-icon"><i class="bi bi-aspect-ratio"></i></div><div><h3>Display Type</h3><p>The panel fitted to this board. There is nothing to choose: this firmware targets one display.</p></div></div>
         <div class="row g-3">
-          <div class="col-lg-6 col-md-8"><label class="form-label" for="displayType"><i class="bi bi-display"></i>LCD profile</label><select id="displayType" class="form-select"><option value="720_720_4">4-inch round LCD, 720 x 720</option><option value="800_800_3_4">3.4-inch round LCD, 800 x 800</option></select><div class="form-text">Save the settings, then reboot for the panel initialisation and radar layout to change.</div></div>
+          <div class="col-lg-6 col-md-8"><label class="form-label"><i class="bi bi-display"></i>LCD profile</label><input class="form-control" type="text" value="1.43-inch round AMOLED, 466 x 466 (CO5300)" readonly><div class="form-text">The radar layout is compiled for this panel, so no reboot prompt follows a save.</div></div>
         </div>
       </div>
     </div>
@@ -1181,11 +1156,11 @@ function renderHardwareControls(data){
           <div class="col-md-4"><label class="form-label" for="hardwareShowHints"><i class="bi bi-info-circle"></i>Show menu hints</label><div class="form-check form-switch mb-0"><input id="hardwareShowHints" class="form-check-input" type="checkbox"></div></div>
           <div class="col-md-4"><label class="form-label" for="hardwareMenuTimeoutSec"><i class="bi bi-hourglass-split"></i>Menu timeout</label><div class="input-group"><input id="hardwareMenuTimeoutSec" class="form-control" type="number" min="3" max="120"><span class="input-group-text">s</span></div></div>
           <div class="col-lg-3 col-md-6"><label class="form-label" for="hardwareOledI2cAddr"><i class="bi bi-display"></i>OLED I2C address</label><input id="hardwareOledI2cAddr" class="form-control" type="text" inputmode="text" placeholder="0x3c"></div>
-          <div class="col-lg-3 col-md-6"><label class="form-label" for="hardwareConfirmGpio"><i class="bi bi-check-circle"></i>Confirm GPIO</label><input id="hardwareConfirmGpio" class="form-control" type="number" min="0" max="63"></div>
-          <div class="col-lg-3 col-md-6"><label class="form-label" for="hardwareBackGpio"><i class="bi bi-arrow-left-circle"></i>Back GPIO</label><input id="hardwareBackGpio" class="form-control" type="number" min="0" max="63"></div>
-          <div class="col-lg-3 col-md-6"><label class="form-label" for="hardwareRotaryPushGpio"><i class="bi bi-record-circle"></i>Encoder push GPIO</label><input id="hardwareRotaryPushGpio" class="form-control" type="number" min="0" max="63"></div>
-          <div class="col-lg-3 col-md-6"><label class="form-label" for="hardwareRotaryAGpio"><i class="bi bi-arrow-clockwise"></i>Encoder A / CLK GPIO</label><input id="hardwareRotaryAGpio" class="form-control" type="number" min="0" max="63"></div>
-          <div class="col-lg-3 col-md-6"><label class="form-label" for="hardwareRotaryBGpio"><i class="bi bi-arrow-counterclockwise"></i>Encoder B / DATA GPIO</label><input id="hardwareRotaryBGpio" class="form-control" type="number" min="0" max="63"></div>
+          <div class="col-lg-3 col-md-6"><label class="form-label" for="hardwareConfirmGpio"><i class="bi bi-check-circle"></i>Confirm GPIO</label><input id="hardwareConfirmGpio" class="form-control" type="number" min="-1" max="48"></div>
+          <div class="col-lg-3 col-md-6"><label class="form-label" for="hardwareBackGpio"><i class="bi bi-arrow-left-circle"></i>Back GPIO</label><input id="hardwareBackGpio" class="form-control" type="number" min="-1" max="48"></div>
+          <div class="col-lg-3 col-md-6"><label class="form-label" for="hardwareRotaryPushGpio"><i class="bi bi-record-circle"></i>Encoder push GPIO</label><input id="hardwareRotaryPushGpio" class="form-control" type="number" min="-1" max="48"></div>
+          <div class="col-lg-3 col-md-6"><label class="form-label" for="hardwareRotaryAGpio"><i class="bi bi-arrow-clockwise"></i>Encoder A / CLK GPIO</label><input id="hardwareRotaryAGpio" class="form-control" type="number" min="-1" max="48"></div>
+          <div class="col-lg-3 col-md-6"><label class="form-label" for="hardwareRotaryBGpio"><i class="bi bi-arrow-counterclockwise"></i>Encoder B / DATA GPIO</label><input id="hardwareRotaryBGpio" class="form-control" type="number" min="-1" max="48"></div>
           <div class="col-lg-3 col-md-6"><label class="form-label" for="hardwareRotaryAction"><i class="bi bi-arrow-left-right"></i>Rotary when menu closed</label><select id="hardwareRotaryAction" class="form-select"><option value="range">Change range</option><option value="menu">Open menu</option></select></div>
           <div class="col-lg-3 col-md-6"><label class="form-label" for="hardwareConfirmAction"><i class="bi bi-check2-square"></i>Confirm button</label><select id="hardwareConfirmAction" class="form-select hardware-action-select"></select></div>
           <div class="col-lg-3 col-md-6"><label class="form-label" for="hardwareBackAction"><i class="bi bi-box-arrow-left"></i>Back button</label><select id="hardwareBackAction" class="form-select hardware-action-select"></select></div>
@@ -1203,17 +1178,16 @@ function renderHardwareControls(data){
   $('.hardware-action-select',content).each(function(){
     $(this).html(hardwareActions.map(a=>`<option value="${a[0]}">${a[1]}</option>`).join(''));
   });
-  $('#displayType',content).val((data.general&&data.general.displayType)||'720_720_4');
   let hw=(data.interface&&data.interface.hardware)||{};
   $('#hardwareControlsEnabled',content).prop('checked',hw.enabled!==false);
   $('#hardwareShowHints',content).prop('checked',hw.showHints!==false);
   $('#hardwareMenuTimeoutSec',content).val(hw.menuTimeoutSec ?? 15);
   $('#hardwareOledI2cAddr',content).val(formatI2cAddress(hw.oledI2cAddr ?? 0x3c));
-  $('#hardwareConfirmGpio',content).val(hw.confirmGpio ?? 30);
-  $('#hardwareBackGpio',content).val(hw.backGpio ?? 46);
-  $('#hardwareRotaryAGpio',content).val(hw.rotaryAGpio ?? 47);
-  $('#hardwareRotaryBGpio',content).val(hw.rotaryBGpio ?? 52);
-  $('#hardwareRotaryPushGpio',content).val(hw.rotaryPushGpio ?? 48);
+  $('#hardwareConfirmGpio',content).val(hw.confirmGpio ?? -1);
+  $('#hardwareBackGpio',content).val(hw.backGpio ?? -1);
+  $('#hardwareRotaryAGpio',content).val(hw.rotaryAGpio ?? -1);
+  $('#hardwareRotaryBGpio',content).val(hw.rotaryBGpio ?? -1);
+  $('#hardwareRotaryPushGpio',content).val(hw.rotaryPushGpio ?? -1);
   $('#hardwareRotaryAction',content).val(hw.rotaryAction||'range');
   $('#hardwareConfirmAction',content).val(hw.confirmAction||'menuSelect');
   $('#hardwareBackAction',content).val(hw.backAction||'back');
@@ -1235,10 +1209,8 @@ function renderHardwareControls(data){
 	function renderLocation(l){ selectedLocation=l&&l.name?{name:l.name,state:l.state||'',country:l.country||'',lat:+l.lat,lon:+l.lon}:null; $('#copyLocationToManual').prop('disabled',!selectedLocation); $('#locationDetail').text(selectedLocation?`Selected ${locationLabel(selectedLocation)}`:'Search for a location to use it as the radar centre.'); refreshLocationMap(); }
 	// Render OpenWeather geocoder results as selectable list items.
 	function renderLocationResults(items){ locationResults=items||[]; let box=$('#locationResults').empty(); if(!locationResults.length){ box.append('<div class="list-group-item text-muted">No locations found</div>'); return; } locationResults.forEach((l,i)=>box.append(`<button class="list-group-item list-group-item-action location-result" type="button" data-index="${i}">${esc(locationLabel(l))}</button>`)); }
-	// Refresh the GPS status panel from the latest settings JSON.
-	function renderGps(gps){ gps=gps||{}; latestGps=gps; let cls=gps.usingFix?'success':(gps.deviceConnected?'warning':'secondary'); $('#gpsStatusBox').removeClass('alert-success alert-warning alert-secondary').addClass('alert-'+cls); $('#gpsStatus').text(gps.status||'GPS status unknown'); $('#gpsDetail').text(gps.detail||''); $('#copyGpsToManual').prop('disabled',!gps.hasFix); refreshLocationMap(false); }
 	// Enable only the form controls that apply to the selected centre source.
-	function updateSourceState(){ let src=$('#centerSource').val(); $('#lat,#lon').prop('disabled',src!=='manual'); $('#gpsStatusBox').toggle(src==='gps'); $('#airportBox').toggle(src==='airport'); $('#locationBox').toggle(src==='location'); $('#showRunways').prop('disabled',src!=='airport'); if(src!=='airport') $('#showRunways').prop('checked',false); refreshLocationMap(); }
+	function updateSourceState(){ let src=$('#centerSource').val(); $('#lat,#lon').prop('disabled',src!=='manual'); $('#airportBox').toggle(src==='airport'); $('#locationBox').toggle(src==='location'); $('#showRunways').prop('disabled',src!=='airport'); if(src!=='airport') $('#showRunways').prop('checked',false); refreshLocationMap(); }
 	// Enable the local aircraft URL only when local receiver mode is selected.
 	function updateDataSourceState(){ let src=$('#dataSource').val()||'airplanes_live'; $('.data-source-card').removeClass('active'); $(`.data-source-card[data-source="${src}"]`).addClass('active'); $(`input[name="dataSourceCard"][value="${src}"]`).prop('checked',true); $('#localAircraftUrl').prop('disabled',src!=='local'); $('#localSourcePanel').toggleClass('opacity-50',src!=='local'); }
 function wifiStrength(rssi){ rssi=Number(rssi); if(!isFinite(rssi)) return {level:0,label:'Unknown'}; if(rssi>=-55) return {level:4,label:'Excellent'}; if(rssi>=-67) return {level:3,label:'Good'}; if(rssi>=-75) return {level:2,label:'Fair'}; return {level:1,label:'Weak'}; }
@@ -1254,7 +1226,7 @@ function updateWifiCard(wifi){
     .text(connected?'Connected':(wifi.portalActive?'Portal active':(wifi.started?'Not connected':'Disconnected')));
 }
 	// Render the complete settings response into the page.
-	function render(data){ cfg=data; $('#centerSource').val(data.general.centerSource||'manual'); $('#lat').val(data.general.lat); $('#lon').val(data.general.lon); $('#dataSource').val(data.general.dataSource||'airplanes_live'); $('#localAircraftUrl').val(data.general.localAircraftUrl||''); $('#airportDbToken').val((data.apiKeys&&data.apiKeys.airportDbToken)||''); $('#openWeatherApiKey').val((data.apiKeys&&data.apiKeys.openWeatherApiKey)||''); renderStyleGroups(data); renderHardwareControls(data); $('#rangeRows').empty(); for(let i=0;i<10;i++) $('#rangeRows').append(rangeRow(i,data.ranges[i])); renderNotificationRows(data.notifications||[]); rebuildDefaultRange(data.general.defaultRange); updateWifiCard(data.wifi||{}); let a=data.general.airport||{}; if(a.name){ $('#airportSearch').val(airportLabel(a)); renderAirport(a); } else { $('#airportSearch').val(''); renderAirport(null); } let l=data.general.location||{}; if(l.name){ $('#locationSearch').val(locationLabel(l)); renderLocation(l); } else { $('#locationSearch').val(''); renderLocation(null); } $('#locationResults').empty(); renderGps(data.gps); updateSourceState(); updateDataSourceState(); status('Loaded','success'); setTimeout(()=>refreshLocationMap(false),120); }
+	function render(data){ cfg=data; $('#centerSource').val(data.general.centerSource||'manual'); $('#lat').val(data.general.lat); $('#lon').val(data.general.lon); $('#dataSource').val(data.general.dataSource||'airplanes_live'); $('#localAircraftUrl').val(data.general.localAircraftUrl||''); $('#airportDbToken').val((data.apiKeys&&data.apiKeys.airportDbToken)||''); $('#openWeatherApiKey').val((data.apiKeys&&data.apiKeys.openWeatherApiKey)||''); renderStyleGroups(data); renderHardwareControls(data); $('#rangeRows').empty(); for(let i=0;i<10;i++) $('#rangeRows').append(rangeRow(i,data.ranges[i])); renderNotificationRows(data.notifications||[]); rebuildDefaultRange(data.general.defaultRange); updateWifiCard(data.wifi||{}); let a=data.general.airport||{}; if(a.name){ $('#airportSearch').val(airportLabel(a)); renderAirport(a); } else { $('#airportSearch').val(''); renderAirport(null); } let l=data.general.location||{}; if(l.name){ $('#locationSearch').val(locationLabel(l)); renderLocation(l); } else { $('#locationSearch').val(''); renderLocation(null); } $('#locationResults').empty(); updateSourceState(); updateDataSourceState(); status('Loaded','success'); setTimeout(()=>refreshLocationMap(false),120); }
 	// Rebuild the startup range dropdown from the current range preset rows.
 	function rebuildDefaultRange(selected){ let sel=$('#defaultRange').empty(); collectRanges().forEach(r=>{ if(r.miles>0) sel.append(`<option value="${r.miles}">${r.miles} MI</option>`); }); sel.val(String(selected||(collectRanges()[0]||{}).miles||50)); }
 	// Collect the range preset rows into the settings payload format.
@@ -1276,13 +1248,16 @@ function updateWifiCard(wifi){
 	// Parse a hardware address field, accepting decimal or 0x-prefixed hex.
 	function parseHardwareAddress(value,fallback){ let text=String(value||'').trim().toLowerCase(); let parsed=text.startsWith('0x')?parseInt(text,16):parseInt(text,10); return Number.isFinite(parsed)?parsed:fallback; }
 	// Build the complete settings payload sent to the ESP32.
-	function collectSettings(){ let airport=selectedAirport||(cfg&&cfg.general&&cfg.general.airport)||{}; let location=selectedLocation||(cfg&&cfg.general&&cfg.general.location)||{}; let general={centerSource:$('#centerSource').val(), lat:+$('#lat').val(), lon:+$('#lon').val(), defaultRange:+$('#defaultRange').val(), displayType:$('#displayType').val(), dataSource:$('#dataSource').val(), localAircraftUrl:$('#localAircraftUrl').val().trim(), airport:airport, location:location}; return {general:general, apiKeys:{airportDbToken:$('#airportDbToken').val().trim(), openWeatherApiKey:$('#openWeatherApiKey').val().trim()}, interface:{showSweep:$('#showSweep').is(':checked'), sweepStepDeg:+$('#sweepStepDeg').val()||5, sweepDrawIntervalMs:+$('#sweepDrawIntervalMs').val()||50, showSweepTrail:$('#showSweepTrail').is(':checked'), sweepTrailCount:+$('#sweepTrailCount').val()||0, sweepTrailStepDeg:+$('#sweepTrailStepDeg').val()||1, sweepTrailWidth:+$('#sweepTrailWidth').val()||6, showAirports:$('#showAirports').is(':checked'), showAirportWeather:$('#showAirportWeather').is(':checked'), airportWeatherRefreshMin:+$('#airportWeatherRefreshMin').val()||15, airportWeatherIconSize:+$('#airportWeatherIconSize').val()||14, showAirportRunways:$('#showRunways').is(':checked'), showCountries:$('#showCountries').is(':checked'), emergencyRed:$('#emergencyRed').is(':checked'), showAircraftRoutes:$('#showAircraftRoutes').is(':checked'), routeStyle:$('#routeStyle').val(), showGroundAircraft:$('#showGroundAircraft').is(':checked'), groundSpeedKt:+$('#groundSpeedKt').val()||0, headingMode:$('#headingMode').val(), showClimbDescent:$('#showClimbDescent').is(':checked'), hardware:{enabled:$('#hardwareControlsEnabled').is(':checked'), showHints:$('#hardwareShowHints').is(':checked'), menuTimeoutSec:+$('#hardwareMenuTimeoutSec').val()||15, oledI2cAddr:parseHardwareAddress($('#hardwareOledI2cAddr').val(),0x3c), confirmGpio:+$('#hardwareConfirmGpio').val()||0, backGpio:+$('#hardwareBackGpio').val()||0, rotaryAGpio:+$('#hardwareRotaryAGpio').val()||0, rotaryBGpio:+$('#hardwareRotaryBGpio').val()||0, rotaryPushGpio:+$('#hardwareRotaryPushGpio').val()||0, rotaryAction:$('#hardwareRotaryAction').val(), confirmAction:$('#hardwareConfirmAction').val(), backAction:$('#hardwareBackAction').val(), pushAction:$('#hardwarePushAction').val()}}, colors:collectColors(), altitudeColors:collectAltitudeColors(), widths:collectWidths(), visible:collectVisible(), ui:collectUi(), labelStyles:collectLabelStyles(), ranges:collectRanges(), notifications:collectNotifications()}; }
+	// Read a control-pin field. Blank means "not wired" (-1), not GPIO 0 -- which on this board
+	// is the boot button and would give the control a phantom press on every reset.
+	function gpioField(sel){ let raw=$(sel).val(); if(raw===''||raw===null||raw===undefined) return -1; let value=parseInt(raw,10); return Number.isFinite(value)?value:-1; }
+	function collectSettings(){ let airport=selectedAirport||(cfg&&cfg.general&&cfg.general.airport)||{}; let location=selectedLocation||(cfg&&cfg.general&&cfg.general.location)||{}; let general={centerSource:$('#centerSource').val(), lat:+$('#lat').val(), lon:+$('#lon').val(), defaultRange:+$('#defaultRange').val(), dataSource:$('#dataSource').val(), localAircraftUrl:$('#localAircraftUrl').val().trim(), airport:airport, location:location}; return {general:general, apiKeys:{airportDbToken:$('#airportDbToken').val().trim(), openWeatherApiKey:$('#openWeatherApiKey').val().trim()}, interface:{showSweep:$('#showSweep').is(':checked'), sweepStepDeg:+$('#sweepStepDeg').val()||5, sweepDrawIntervalMs:+$('#sweepDrawIntervalMs').val()||50, showSweepTrail:$('#showSweepTrail').is(':checked'), sweepTrailCount:+$('#sweepTrailCount').val()||0, sweepTrailStepDeg:+$('#sweepTrailStepDeg').val()||1, sweepTrailWidth:+$('#sweepTrailWidth').val()||6, showAirports:$('#showAirports').is(':checked'), showAirportWeather:$('#showAirportWeather').is(':checked'), airportWeatherRefreshMin:+$('#airportWeatherRefreshMin').val()||15, airportWeatherIconSize:+$('#airportWeatherIconSize').val()||14, showAirportRunways:$('#showRunways').is(':checked'), showCountries:$('#showCountries').is(':checked'), emergencyRed:$('#emergencyRed').is(':checked'), showAircraftRoutes:$('#showAircraftRoutes').is(':checked'), routeStyle:$('#routeStyle').val(), showGroundAircraft:$('#showGroundAircraft').is(':checked'), groundSpeedKt:+$('#groundSpeedKt').val()||0, headingMode:$('#headingMode').val(), showClimbDescent:$('#showClimbDescent').is(':checked'), hardware:{enabled:$('#hardwareControlsEnabled').is(':checked'), showHints:$('#hardwareShowHints').is(':checked'), menuTimeoutSec:+$('#hardwareMenuTimeoutSec').val()||15, oledI2cAddr:parseHardwareAddress($('#hardwareOledI2cAddr').val(),0x3c), confirmGpio:gpioField('#hardwareConfirmGpio'), backGpio:gpioField('#hardwareBackGpio'), rotaryAGpio:gpioField('#hardwareRotaryAGpio'), rotaryBGpio:gpioField('#hardwareRotaryBGpio'), rotaryPushGpio:gpioField('#hardwareRotaryPushGpio'), rotaryAction:$('#hardwareRotaryAction').val(), confirmAction:$('#hardwareConfirmAction').val(), backAction:$('#hardwareBackAction').val(), pushAction:$('#hardwarePushAction').val()}}, colors:collectColors(), altitudeColors:collectAltitudeColors(), widths:collectWidths(), visible:collectVisible(), ui:collectUi(), labelStyles:collectLabelStyles(), ranges:collectRanges(), notifications:collectNotifications()}; }
 	// Load factory defaults so reset buttons can restore only selected groups.
 	function loadDefaults(){ $.getJSON('/api/settings/defaults').done(data=>defaults=data); }
 	// Load current settings and refresh the defaults cache.
 	function loadSettings(){ let req=$.getJSON('/api/settings').done(render).fail(()=>status('Load failed','danger')); loadDefaults(); return req; }
 	// Save the current form state and then re-render from the device response.
-	function saveSettings(){ status('Saving','warning'); let target=loadingTarget(), previousDisplay=(cfg&&cfg.general&&cfg.general.displayType)||'720_720_4', payload=collectSettings(), displayChanged=payload.general.displayType&&payload.general.displayType!==previousDisplay; return withAjaxLoading(target,'Saving settings to the ESP32...',()=>$.ajax({url:'/api/settings',method:'POST',data:JSON.stringify(payload),contentType:'application/json'}).done(()=>loadSettings().done(()=>{ if(displayChanged&&confirm('The display type has changed. Reboot the ESP32 now so the new panel profile is used?')) rebootDevice(); })).fail(x=>status(x.responseText||'Save failed','danger'))); }
+	function saveSettings(){ status('Saving','warning'); let target=loadingTarget(), payload=collectSettings(); return withAjaxLoading(target,'Saving settings to the ESP32...',()=>$.ajax({url:'/api/settings',method:'POST',data:JSON.stringify(payload),contentType:'application/json'}).done(()=>loadSettings()).fail(x=>status(x.responseText||'Save failed','danger'))); }
 	function rebootDevice(){ return withAjaxLoading('#espStatus','Rebooting the ESP32...',()=>$.ajax({url:'/api/reboot',method:'POST'})).done(()=>status('Rebooting','warning')).fail(x=>status(x.responseText||'Reboot failed','danger')); }
 	const mainTabByHash={dashboard:'#espStatus',status:'#espStatus',location:'#general','data-sources':'#apiKeys',display:'#colours',hardware:'#hardwareControl','hardware-control':'#hardwareControl',notifications:'#notifications',ranges:'#ranges',wifi:'#wifi'};
 	const hashByMainTab={espStatus:'dashboard',general:'location',apiKeys:'data-sources',colours:'display',hardwareControl:'hardware',notifications:'notifications',ranges:'ranges',wifi:'wifi'};
@@ -1399,7 +1374,6 @@ $('#lat,#lon').on('input',function(){ if($('#centerSource').val()==='manual') re
 $('#dataSource').on('change',updateDataSourceState);
 $('input[name="dataSourceCard"]').on('change',function(){ $('#dataSource').val($(this).val()); updateDataSourceState(); });
 $('.data-source-card').on('click',function(){ $('#dataSource').val($(this).data('source')); updateDataSourceState(); });
-$('#copyGpsToManual').on('click',function(){ withAjaxLoading('#general','Reading GPS position...',()=>$.getJSON('/api/settings')).done(data=>{ if(!data.gps||!data.gps.hasFix){ status('No GPS lock','warning'); return; } $('#lat').val(Number(data.gps.lat).toFixed(6)); $('#lon').val(Number(data.gps.lon).toFixed(6)); $('#centerSource').val('manual'); updateSourceState(); saveSettings(); }).fail(()=>status('GPS copy failed','danger')); });
 $('#airportSearch').on('input',function(){ let text=$(this).val(); if(airportOptions[text]){ renderAirport(airportOptions[text]); return; } renderAirport(null); clearTimeout(airportTimer); if(text.length<2) return; airportTimer=setTimeout(()=>{ $.getJSON('/api/airports',{q:text}).done(data=>{ airportOptions={}; let list=$('#airportOptions').empty(); (data.airports||[]).forEach(a=>{ let label=airportLabel(a); airportOptions[label]=a; list.append(`<option value="${esc(label)}"></option>`); }); if(airportOptions[$('#airportSearch').val()]) renderAirport(airportOptions[$('#airportSearch').val()]); }); },250); });
 $('#copyAirportToManual').on('click',function(){ if(!selectedAirport){ status('No airport selected','warning'); return; } $('#lat').val(Number(selectedAirport.lat).toFixed(6)); $('#lon').val(Number(selectedAirport.lon).toFixed(6)); $('#centerSource').val('manual'); updateSourceState(); saveSettings(); });
 	// Query OpenWeather for a place name and render selectable radar centre results.
@@ -1476,7 +1450,6 @@ $('#refreshScreenshot').on('click',loadScreenshot);
 $('button[data-bs-target="#espStatus"]').on('shown.bs.tab',loadDeviceStatus);
 $(function(){ applyTheme(getCookie('adsbRadarTheme')||document.documentElement.getAttribute('data-theme')||'light',false); activateTabFromUrl(); loadSettings(); if($('#espStatus').hasClass('active')) loadDeviceStatus(); });
 $(window).on('hashchange',activateTabFromUrl);
-setInterval(()=>{ if(cfg&&$('#centerSource').val()==='gps') $.getJSON('/api/settings').done(data=>renderGps(data.gps)); },5000);
 setInterval(()=>{ if($('#espStatus').hasClass('active')) loadDeviceStatus(); },5000);
 </script>
 </body>

@@ -1,62 +1,119 @@
-# This file was generated using idf.py save-defconfig. It can be edited manually.
-# Espressif IoT Development Framework (ESP-IDF) 5.4.0 Project Minimal Configuration
+# Espressif IoT Development Framework (ESP-IDF) project minimal configuration for the
+# Waveshare ESP32-S3-Touch-AMOLED-1.43 (ESP32-S3-PICO, 8 MB octal PSRAM, 16 MB flash).
 #
-CONFIG_IDF_TARGET="esp32p4"
-CONFIG_ESP32P4_SELECTS_REV_LESS_V3=y
-CONFIG_ESP32P4_REV_MIN_1=y
+CONFIG_IDF_TARGET="esp32s3"
+
+# 16 MB flash. QIO at 80 MHz is what the module is specified for.
 CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
+CONFIG_ESPTOOLPY_FLASHFREQ_80M=y
 CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
-CONFIG_BSP_LCD_TYPE_720_720_4_INCH=y
-# CONFIG_BSP_LCD_TYPE_800_800_3_4_INCH is not set
-CONFIG_ESP_WIFI_SOFTAP_SUPPORT=y
+CONFIG_PARTITION_TABLE_CUSTOM=y
+
+# 8 MB octal PSRAM. The radar keeps two full-size canvases (RGB565 + ARGB8888), the LVGL draw
+# buffers, and HTTP response buffers here, so PSRAM is the binding resource on this board rather
+# than internal RAM.
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_OCT=y
+CONFIG_SPIRAM_SPEED_80M=y
 CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y
-CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=1024
+# Allocations at or below this size are forced into internal RAM. The ESP32-P4 build used 1024,
+# which it could afford; here it starves the chip. The radar UI builds hundreds of LVGL objects
+# of roughly 300 bytes each -- aircraft markers, airport labels, menu rows -- and at 1024 every
+# one of them lands internal, leaving about 15 KB free with PSRAM 85% empty and no room for the
+# TLS handshake. At 128 those objects go to PSRAM, where they are only ever touched by the CPU.
+# Anything that genuinely needs internal or DMA-capable memory asks for it by capability and is
+# unaffected.
+CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=128
 CONFIG_SPIRAM_MALLOC_RESERVE_INTERNAL=65536
 CONFIG_NVS_ALLOCATE_CACHE_IN_SPIRAM=y
-CONFIG_MBEDTLS_DEFAULT_MEM_ALLOC=y
+# Deliberately not setting SPIRAM_FETCH_INSTRUCTIONS / SPIRAM_RODATA. They would copy .text and
+# .rodata into PSRAM at boot, and this image is 2.7 MB of the two combined -- a third of the
+# 8 MB the canvases, LVGL buffers and HTTP buffers have to share.
+
+# The S3 renders LVGL entirely in software, so the CPU clock is on the critical path for the
+# sweep redraw in a way it was not on the P4.
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+CONFIG_COMPILER_OPTIMIZATION_PERF=y
+
+# Native WiFi. The ESP32-P4 build reached WiFi through esp_wifi_remote/esp_hosted and a C6
+# co-processor; the S3 has its own radio, so those components are gone entirely.
+CONFIG_ESP_WIFI_SOFTAP_SUPPORT=y
+
+# WiFi has to be trimmed to share internal RAM with the LVGL draw buffers. At stock settings
+# esp_wifi_init() fails with ESP_ERR_NO_MEM and ESP_ERROR_CHECK panics the board into a boot
+# loop, with the heap reporting plenty free but no block large enough.
+#
+# The IRAM options are the big win: they place WiFi's hot paths in IRAM, which on this chip
+# comes out of the same DIRAM the draw buffers need. Running that code from the flash cache
+# costs WiFi throughput, which this firmware does not need -- it makes one ADS-B fetch every
+# few seconds, not a sustained stream.
+# CONFIG_ESP_WIFI_IRAM_OPT is not set
+# CONFIG_ESP_WIFI_RX_IRAM_OPT is not set
+# Static RX buffers are DMA-capable and therefore always internal. Dynamic ones can live in
+# PSRAM, so shift the balance towards those.
+CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=8
+CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=32
+CONFIG_ESP_WIFI_RX_BA_WIN=8
+
+# TLS against the ADS-B feeds is the largest single RAM consumer after the canvases. The S3 has
+# no hardware ECC or GCM acceleration, unlike the P4, so only the peripherals it does have are
+# enabled here.
+# Allocate mbedTLS buffers from PSRAM rather than internal RAM.
+#
+# Internal RAM is the scarce resource here and TLS was the largest competitor for it. Worse than
+# the size was the fragmentation: each handshake churns internal heap, and after a burst of them
+# -- opening an aircraft popup starts photo and route fetches alongside the aircraft feed -- the
+# largest free internal block fell from 29 KB to 14 KB and never recovered, so the aircraft
+# fetch's own headroom check refused to run again and the radar stopped updating until reboot.
+# Total free internal was never the problem; contiguity was.
+#
+# PSRAM has megabytes spare and no such pressure. Hardware AES/SHA still work: the crypto
+# drivers check whether a buffer is DMA-capable and bounce it when it is not.
+# CONFIG_MBEDTLS_DEFAULT_MEM_ALLOC is not set
+CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y
 CONFIG_MBEDTLS_DYNAMIC_BUFFER=y
 CONFIG_MBEDTLS_DYNAMIC_FREE_CONFIG_DATA=y
 # CONFIG_MBEDTLS_SSL_KEEP_PEER_CERTIFICATE is not set
 CONFIG_MBEDTLS_HARDWARE_AES=y
-CONFIG_MBEDTLS_HARDWARE_GCM=y
 CONFIG_MBEDTLS_HARDWARE_MPI=y
 CONFIG_MBEDTLS_HARDWARE_SHA=y
-CONFIG_MBEDTLS_HARDWARE_ECC=y
-# CONFIG_ESP_HOSTED_SDIO_OPTIMIZATION_RX_NONE is not set
-# CONFIG_ESP_HOSTED_SDIO_OPTIMIZATION_RX_MAX_SIZE is not set
-CONFIG_ESP_HOSTED_SDIO_OPTIMIZATION_RX_STREAMING_MODE=y
-CONFIG_ESP_HOSTED_SDIO_TX_Q_SIZE=12
-CONFIG_ESP_HOSTED_SDIO_RX_Q_SIZE=12
+
 CONFIG_RADAR_WIFI_SSID=""
 CONFIG_RADAR_WIFI_PASSWORD=""
 CONFIG_RADAR_WIFI_MAX_RETRY=8
 CONFIG_RADAR_CENTER_LAT="51.5073219"
 CONFIG_RADAR_CENTER_LON="-0.1276474"
 CONFIG_RADAR_FETCH_INTERVAL_SEC=10
-CONFIG_PARTITION_TABLE_CUSTOM=y
-CONFIG_COMPILER_OPTIMIZATION_PERF=y
-CONFIG_SPIRAM=y
-CONFIG_SPIRAM_SPEED_200M=y
-CONFIG_SPIRAM_XIP_FROM_PSRAM=y
-CONFIG_CACHE_L2_CACHE_256KB=y
-CONFIG_CACHE_L2_CACHE_LINE_128B=y
+
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=10240
 CONFIG_ESP_TASK_WDT_TIMEOUT_S=20
-# The radar performs long LVGL redraws and HTTPS handshakes. Keep the task
-# watchdog available for explicitly subscribed tasks, but do not monitor idle
-# tasks because TLS bignum work and full-screen rendering can legitimately keep a
-# core busy for longer than the idle watchdog threshold.
+# The radar performs long LVGL redraws and HTTPS handshakes. Keep the task watchdog available
+# for explicitly subscribed tasks, but do not monitor idle tasks because TLS bignum work and
+# full-screen rendering can legitimately keep a core busy for longer than the idle watchdog
+# threshold.
 # CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU0 is not set
 # CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU1 is not set
 CONFIG_FREERTOS_HZ=1000
 CONFIG_FREERTOS_VTASKLIST_INCLUDE_COREID=y
 CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y
+
+# LVGL draw buffers, in display lines, each hor_res*lines*2 bytes and both in internal RAM.
+# Pinned here rather than left to the BSP's Kconfig default so it is visible next to the other
+# internal-RAM decisions it competes with -- WiFi's buffers and the TLS handshake.
+CONFIG_BSP_DISPLAY_LVGL_BUF_HEIGHT=12
+
 CONFIG_LV_USE_CLIB_MALLOC=y
 CONFIG_LV_USE_CLIB_STRING=y
 CONFIG_LV_USE_CLIB_SPRINTF=y
-CONFIG_LV_DEF_REFR_PERIOD=15
+# 15 ms was the P4's refresh period. Software rendering on the S3 cannot sustain that over a
+# 466x466 frame, and asking for it only queues work; 30 ms leaves the sweep smooth without the
+# render task starving the fetch and TLS tasks.
+CONFIG_LV_DEF_REFR_PERIOD=30
 CONFIG_LV_OS_FREERTOS=y
 CONFIG_LV_DRAW_SW_DRAW_UNIT_CNT=2
+# Tempting on a software renderer, but LVGL's fast-mem attribute pulls its blend paths into
+# DIRAM, and internal RAM is the scarce resource on this board: with it enabled only ~86 KB of
+# the 341 KB remains for WiFi and the TLS handshake. LVGL runs from the flash cache instead.
 # CONFIG_LV_ATTRIBUTE_FAST_MEM_USE_IRAM is not set
 # CONFIG_LV_BUILD_EXAMPLES is not set
 # CONFIG_LV_BUILD_DEMOS is not set
@@ -75,4 +132,3 @@ CONFIG_LV_TXT_BREAK_CHARS=" ,.;:-_"
 CONFIG_LV_USE_SYSMON=y
 CONFIG_LV_USE_PERF_MONITOR=y
 CONFIG_LV_USE_IMGFONT=y
-CONFIG_IDF_EXPERIMENTAL_FEATURES=y

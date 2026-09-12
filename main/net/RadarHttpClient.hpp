@@ -11,10 +11,11 @@
 /*
  * HTTP/TLS helper shared by aircraft, photo, settings, and runway fetches.
  *
- * The ESP32-P4 plus hosted WiFi module is sensitive to concurrent TLS work:
- * certificate validation, AES buffers, SDIO packet buffers, and LVGL all
- * compete for internal DMA-capable memory. This class serialises HTTPS fetches
- * with one mutex and prefers PSRAM for response buffers wherever possible.
+ * This board is sensitive to concurrent TLS work: certificate validation, AES
+ * buffers, WiFi packet buffers, and the LVGL draw buffers all compete for the
+ * same internal DMA-capable memory, of which the ESP32-S3 has far less than the
+ * ESP32-P4 this was ported from. This class serialises HTTPS fetches with one
+ * mutex and prefers PSRAM for response buffers wherever possible.
  */
 class RadarHttpClient {
 public:
