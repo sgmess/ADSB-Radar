@@ -669,9 +669,9 @@ void RadarSettings::setDefaults()
     show_airport_runways = false;
     aircraft_data_source = AIRCRAFT_DATA_SOURCE_AIRPLANES_LIVE;
     /*
-     * The ESP32-S3-Touch-AMOLED-1.43 breaks out very few GPIOs and reserves 47/48 for the I2C
-     * bus that the touch controller, IMU and RTC all share, so there is no pin set that can be
-     * defaulted safely. Physical controls therefore start off and unassigned; the browser
+     * The ESP32-S3-Touch-LCD-2.8C spends nearly every GPIO on its 16-bit RGB panel bus, and the
+     * I2C pair on its header (7/15) is shared with the IO expander, touch, IMU and RTC, so there
+     * is no pin set that can be defaulted safely. Physical controls therefore start off and unassigned; the browser
      * admin's Hardware page is where a user with a wired encoder picks pins.
      */
     hardware_controls_enabled = false;
@@ -1267,7 +1267,7 @@ char *RadarSettings::toJson(const char *wifi_ssid) const
     /*
      * displayType is deliberately not reported. It names an ESP32-P4 panel profile, and on this
      * board the stored value is whatever a settings import last left there -- emitting it made
-     * /api/settings claim a 720x720 panel on a 466x466 display. The field is still accepted on
+     * /api/settings claim a 720x720 panel on a 466x466 AMOLED. The field is still accepted on
      * import so a file from a P4 board loads cleanly; it simply has nothing to describe here.
      */
     cJSON_AddStringToObject(general, "dataSource",

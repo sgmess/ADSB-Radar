@@ -970,6 +970,8 @@ bool SettingsServer::start()
     config.server_port = 80;
     config.max_uri_handlers = 15;
     config.stack_size = 10240;
+    /* The server's stack goes where the app's other task stacks do; see BoardConfig.hpp. */
+    config.task_caps = BOARD_TASK_STACK_CAPS;
     config.lru_purge_enable = true;
     config.uri_match_fn = httpd_uri_match_wildcard;
 

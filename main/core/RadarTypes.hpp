@@ -26,7 +26,7 @@
  * Panel geometry.
  *
  * The ESP32-P4 build derived these at boot because it supported two round LCD profiles chosen
- * from NVS. This board has one fixed 466x466 AMOLED, so they are compile-time constants and the
+ * from NVS. This board has one fixed 480x480 IPS panel, so they are compile-time constants and the
  * compiler can fold the arithmetic in the per-pixel drawing paths, which matters more here: the
  * S3 renders in software where the P4 had a 2D accelerator.
  */
@@ -43,7 +43,7 @@
 /*
  * Control arc. CurvedButtonController draws glyphs centred on CONTROL_ARC_RADIUS + 1 in boxes
  * 20px tall, so the outermost text pixel sits at radius +11. Keep that inside SCREEN_W / 2
- * (233) or the captions clip against the bezel.
+ * (240) or the captions clip against the bezel. At 480 it sits at 239.
  */
 #define CONTROL_ARC_RADIUS (RADAR_RADIUS + 9)
 #define CONTROL_ARC_WIDTH 13
@@ -93,7 +93,8 @@
  *
  * Each is centred, because an off-centre box on a round panel loses its corners to the bezel.
  * Widths are checked against the chord at the box's own top and bottom edge: at 466 the usable
- * half-width at +/-170px from centre is only about 159px, which is what caps these at 300.
+ * half-width at +/-170px from centre is only about 159px, which is what caps these at 300. They
+ * are kept at the 466 values on this 480 panel, which only has more room at every height.
  */
 #define RANGE_MENU_W 240
 #define RANGE_MENU_ROW_W 216

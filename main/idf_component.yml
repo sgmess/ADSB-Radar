@@ -1,7 +1,10 @@
 ## IDF Component Manager Manifest File
 dependencies:
+  # Pinned to the release the AMOLED builds were brought up on. Any change to the manifests makes
+  # the component manager re-solve and move to the newest 9.x, which should be a deliberate step
+  # of its own rather than a side effect of a board port.
   lvgl/lvgl:
-    version: ^9.*
+    version: 9.5.0
     public: true
   # Used directly: libpng streams the browser admin's screenshot, zlib inflates gzipped ADS-B
   # responses. Both also arrive transitively through the LVGL adapter's image decoder, but this

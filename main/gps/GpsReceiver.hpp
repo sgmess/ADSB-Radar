@@ -48,8 +48,8 @@ typedef struct {
  * sentences, and publishes a small status snapshot for the radar and settings page. It does not
  * own the radar centre; RadarPositionProvider decides whether to use the GPS fix.
  *
- * The ESP32-S3-Touch-AMOLED-1.43 has no USB-A port and no switchable VBUS, so BOARD_HAS_USB_GPS
- * is 0 there and everything below the public API compiles away. The class is kept rather than
+ * The ESP32-S3-Touch-LCD-2.8C has no USB host port -- its USB-C socket is a USB-UART bridge -- so
+ * BOARD_HAS_USB_GPS is 0 there and everything below the public API compiles away. The class is kept rather than
  * removed so that callers, the settings model, and the status snapshot shape stay identical
  * across boards; start() simply reports the feature as unavailable.
  */

@@ -15,9 +15,9 @@
 /*
  * Stub backend for boards without a USB-A host port.
  *
- * The ESP32-S3-Touch-AMOLED-1.43 exposes only the S3's native USB-C, which is the programming
- * and console port and has no switchable VBUS, so a bus-powered CDC GPS dongle can neither be
- * powered nor enumerated. Rather than carry the USB host stack and its buffers for a device
+ * The ESP32-S3-Touch-LCD-2.8C has one USB-C socket, and it goes to a CH343P USB-UART bridge for
+ * programming and the console rather than to the S3's native USB, so there is no USB host port
+ * a CDC GPS dongle could be enumerated on. Rather than carry the USB host stack and its buffers for a device
  * that can never appear, the receiver reports the feature as unavailable and
  * RadarPositionProvider falls back to the manual centre exactly as it does for a stale fix.
  */

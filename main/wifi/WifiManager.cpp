@@ -637,6 +637,15 @@ bool WifiManager::init()
         owner->wifi_ap_netif = esp_netif_create_default_wifi_ap();
     }
 
+    /*
+     * esp_wifi_init() takes its static buffers from internal DMA-capable RAM and panics the board
+     * into a boot loop if they are not there, so log what it is about to get.
+     */
+    ESP_LOGI(TAG, "Heap before WiFi init: internal %u free (%u largest block), DMA %u free (%u largest)",
+             (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+             (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL),
+             (unsigned)heap_caps_get_free_size(MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL),
+             (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL));
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
     ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));

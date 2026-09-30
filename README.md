@@ -1,7 +1,7 @@
 # ADSB Radar
 
 ADSB Radar is ESP-IDF firmware for the Waveshare
-ESP32-S3-Touch-AMOLED-1.43 round touch display, a 466x466 CO5300 AMOLED. It is a
+ESP32-S3-Touch-LCD-2.8C round touch display, a 480x480 ST7701 IPS LCD. It is a
 standalone aircraft radar display: the ESP32 joins WiFi, fetches live ADS-B
 traffic, plots aircraft around a configurable centre point, and draws a
 radar-style screen with range rings, heading information, altitude colours,
@@ -17,12 +17,14 @@ AI assistance has been used during development of this project, mainly for code
 generation, refactoring, documentation, and debugging. The firmware has still
 been built and tested on the target hardware as the project has evolved.
 
-> **This branch is the ESP32-S3-Touch-AMOLED-1.43 port**, built and running on
-> that board. The original firmware
-> targets the Waveshare ESP32-P4-WIFI6-Touch-LCD-XC with a 720x720 or 800x800
-> round LCD; that version lives on `main`. The two boards differ in SoC, display
-> bus, touch controller, and WiFi path, so they are separate builds rather than
-> one image. See [Differences From The ESP32-P4 Build](#differences-from-the-esp32-p4-build).
+> **This branch is the ESP32-S3-Touch-LCD-2.8C port.** It builds, but it has
+> not yet been run on the board. It is derived from the
+> ESP32-S3-Touch-AMOLED-1.43 port (branch `esp32-s3-amoled-143`), which is
+> hardware-tested and shares this board's SoC, memory and application code. The
+> original firmware targets the Waveshare ESP32-P4-WIFI6-Touch-LCD-XC with a
+> 720x720 or 800x800 round LCD; that version lives on `main`. The boards differ in
+> display bus, touch controller and more, so each is a separate build rather than
+> one image. See [Differences From The Other Builds](#differences-from-the-other-builds).
 
 ## Screenshots
 
@@ -78,26 +80,33 @@ These screenshots are from `assets/UI Images`.
 
 The project is built as one firmware image for the supported round LCD variants:
 
-- 1.43-inch 466x466 round AMOLED (CO5300, QSPI).
+- 2.8-inch 480x480 round IPS LCD (ST7701, 16-bit parallel RGB).
+- GT911 capacitive touch.
 - ESP32-S3 target with native WiFi.
-- Waveshare ESP32-S3-Touch-AMOLED-1.43 BSP, included in this repository.
+- Waveshare ESP32-S3-Touch-LCD-2.8C BSP, included in this repository.
 - LVGL 9 user interface
 
 This board has one panel, so there is no display profile to choose. The radar
-layout is compiled for 466x466.
+layout is compiled for 480x480.
 
 Waveshare hardware documentation:
 
-- [ESP32-S3-Touch-AMOLED-1.43 wiki](https://www.waveshare.com/wiki/ESP32-S3-Touch-AMOLED-1.43)
+- [ESP32-S3-Touch-LCD-2.8C wiki](https://www.waveshare.com/wiki/ESP32-S3-Touch-LCD-2.8C)
+- [ESP32-S3-LCD-2.8C docs](https://docs.waveshare.com/ESP32-S3-LCD-2.8C) (the
+  non-touch variant, same board otherwise)
 
-The wiki's pin table is misaligned and lists an I2C SCL of GPIO 49, which does
-not exist on an ESP32-S3. The pinout used by this firmware is documented in
-`components/waveshare__esp32_s3_touch_amoled_143/include/bsp/esp32_s3_touch_amoled_143.h`
-and was confirmed on hardware.
+The pinout used by this firmware is documented in
+`components/waveshare__esp32_s3_touch_lcd_28c/include/bsp/esp32_s3_touch_lcd_28c.h`.
+It comes from Waveshare's factory demo for this board and matches the
+capsule-radar port, where it runs on hardware.
+
+This build is for the **Touch** variant only. On the non-touch ESP32-S3-LCD-2.8C
+the GT911 bring-up fails and the BSP's error check aborts at boot; the radar is
+driven almost entirely by touch in any case.
 
 ## Features
 
-- Full-screen radar drawn for the 1.43-inch 466x466 round AMOLED.
+- Full-screen radar drawn for the 2.8-inch 480x480 round IPS LCD.
 - Live aircraft data from Airplanes.live, ADSB.lol, ADSB.fi, or a local
   `aircraft.json` feed such as readsb or dump1090.
 - Touch-screen range control with up to ten configurable ranges, refresh
@@ -151,7 +160,7 @@ and was confirmed on hardware.
 
 Required:
 
-- Waveshare ESP32-S3-Touch-AMOLED-1.43 (ESP32-S3, 16 MB flash, 8 MB PSRAM).
+- Waveshare ESP32-S3-Touch-LCD-2.8C (ESP32-S3R8, 16 MB flash, 8 MB PSRAM).
 - USB-C cable for flashing, power, and serial monitor.
 - A WiFi network with internet access.
 - A development machine running Linux, macOS, or Windows.
@@ -159,11 +168,15 @@ Required:
 Optional:
 
 - SSD1306 128x64 I2C display at address `0x3c` for status output, on the shared
-  I2C bus (SDA GPIO 47, SCL GPIO 48).
+  I2C bus broken out on the board's header (SDA GPIO 15, SCL GPIO 7). Addresses
+  `0x20`, `0x5d`, `0x6b` and `0x51` are already taken on that bus.
 - Physical controls: a confirm button, a back button, and a rotary encoder.
   These have no default pins on this board and are off until you assign them in
-  `Hardware -> SSD1306 Module` in the browser admin. Do not use GPIO 47 or 48
-  (the I2C bus), 9-14 or 21 (the panel), or 0 (the boot button).
+  `Hardware -> SSD1306 Module` in the browser admin. Almost every GPIO is spent
+  on the RGB panel bus: do not use 1-18, 21, 38-41 or 45-48 (the panel,
+  backlight, touch INT, battery ADC and I2C), 43/44 (the USB serial console), or
+  0 (the boot button). This firmware does not map the microSD slot, so check the
+  board schematic before using any pin not listed here.
 - AirportDB API token if you want runway drawing. AirportDB requires
   registration at [airportdb.io](https://airportdb.io) and the free API limit is
   5000 calls per month.
@@ -292,8 +305,10 @@ Find the serial port:
 ls /dev/ttyACM* /dev/ttyUSB*
 ```
 
-On this board the USB serial device may appear as `QinHeng Electronics USB
-Single Serial`, usually mapped to something like `/dev/ttyACM0` or `/dev/ttyUSB0`.
+The USB-C socket on this board goes to a CH343P USB-to-serial bridge on UART0,
+not to the S3's native USB. It appears as `QinHeng Electronics USB Single
+Serial`, usually mapped to something like `/dev/ttyACM0` or `/dev/ttyUSB0`, and
+the console is on UART0 to match.
 
 Flash and monitor:
 
@@ -446,10 +461,9 @@ and requires an OpenWeather API key.
 ## GPS
 
 **Not available on this board.** The ESP32-P4 build supports a USB CDC NMEA GPS
-receiver on the board's USB-A host port. The ESP32-S3-Touch-AMOLED-1.43 exposes
-only the S3's native USB-C, which is the programming and console port and has no
-switchable VBUS, so a bus-powered GPS dongle can neither be powered nor
-enumerated.
+receiver on the board's USB-A host port. The ESP32-S3-Touch-LCD-2.8C has one
+USB-C socket, and it goes to a USB-to-serial bridge rather than the S3's native
+USB, so there is no host port a GPS dongle could be enumerated on.
 
 GPS is therefore compiled out here rather than left to fail: the browser admin
 hides the GPS centre source, and a settings file imported from a board that does
@@ -476,80 +490,84 @@ address, current background activity, aircraft data status, range, aircraft
 count, and GPS state. It is deliberately simple, but useful when the round
 display is showing the radar and you still want to know what the ESP32 is doing.
 
-## Differences From The ESP32-P4 Build
+## Differences From The Other Builds
 
-This branch targets a different SoC, not just a different panel, so the changes
-go deeper than a resolution swap.
+This branch shares its SoC, memory, WiFi path and application code with the
+ESP32-S3-Touch-AMOLED-1.43 port it was derived from. The board support
+underneath is new.
 
-| | ESP32-P4 build (`main`) | This build |
-|---|---|---|
-| SoC | ESP32-P4, dual RISC-V 400 MHz, 2D PPA | ESP32-S3, dual Xtensa 240 MHz, software rendering |
-| Panel | 720x720 or 800x800 round LCD over MIPI-DSI | 466x466 CO5300 AMOLED over QSPI |
-| Panel choice | Two profiles selected at runtime from NVS | One panel, compiled in |
-| Touch | GT911 | FT3168 |
-| WiFi | `esp_wifi_remote` + `esp_hosted` via an ESP32-C6 | Native `esp_wifi` |
-| PSRAM | 32 MB hex | 8 MB octal |
-| GPS | USB CDC NMEA on the USB-A host port | Not available; compiled out |
-| Audio / PMIC | ES8311 codec, AXP2101 | Neither is fitted |
+| | ESP32-P4 build (`main`) | 1.43 build (`esp32-s3-amoled-143`) | This build |
+|---|---|---|---|
+| SoC | ESP32-P4, 2D PPA | ESP32-S3, software rendering | ESP32-S3, software rendering |
+| Panel | 720x720 or 800x800 LCD, MIPI-DSI | 466x466 CO5300 AMOLED, QSPI | 480x480 ST7701 IPS, 16-bit parallel RGB |
+| Frame memory | Panel-side DPI buffers | In the panel (GRAM) | None in the panel: one PSRAM frame buffer, scanned out continuously |
+| Brightness | Backlight PWM | Panel register | Backlight PWM (LEDC, GPIO 6) |
+| Touch | GT911 | FT3168 (driver in this repo) | GT911 (`espressif/esp_lcd_touch_gt911`) |
+| IO expander | -- | -- | TCA9554: panel reset and CS, touch reset, buzzer |
+| WiFi | `esp_wifi_remote` via ESP32-C6 | Native `esp_wifi` | Native `esp_wifi` |
+| PSRAM | 32 MB hex | 8 MB octal | 8 MB octal, with code and rodata run from it |
+| Console | USB | Native USB-C | CH343P USB-UART bridge on UART0 |
+| GPS | USB CDC on USB-A | Compiled out | Compiled out |
 
 Things worth knowing if you are working on this branch:
 
-- **Touch comes up after the display, always.** The FT3168 has no reset line of
-  its own; it is tied to the panel reset on GPIO 21 and does not answer on I2C
-  until the panel has been initialised. `bsp_display_start_with_config()` brings
-  the panel up before the touch controller for that reason.
-- **The FT3168 driver is part of this repository.** There is no FT3168 driver in
-  the ESP component registry. It shares the FocalTech touch data layout with the
-  FT5x06 family, but `espressif/esp_lcd_touch_ft5x06` cannot be reused: its init
-  writes FT5x06 threshold registers the FT3168 does not implement, and it never
-  brings the controller out of its default monitor mode, so the chip ACKs every
-  read while reporting zero touch points forever.
-- **Audio is removed rather than disabled.** The 1.75-inch sibling board's I2S
-  BCLK and DIN are GPIO 9 and 10, which on this board are the panel's QSPI CS
-  and SCLK. Leaving audio enabled here would drive the panel's own bus lines.
-- **Layout constants are fixed, not scaled.** 466 is 65% of 720 linearly, but
-  hit targets have a fingertip floor and text has a legibility floor, so the
-  chrome dimensions in `main/core/RadarTypes.hpp` were re-chosen for this panel
-  rather than multiplied through. Menus are centred because an off-centre box on
-  a round panel loses its corners to the bezel.
-- **Internal RAM is the scarce resource**, not PSRAM, and it is shared between
-  the LVGL draw buffers and WiFi. Three settings were tuned against the board
-  rather than guessed, and each comment in `sdkconfig.defaults` says what it
-  costs: `LV_ATTRIBUTE_FAST_MEM_USE_IRAM`, `SPIRAM_FETCH_INSTRUCTIONS` and
-  `SPIRAM_RODATA` are off, and WiFi's IRAM optimisations are disabled with its
-  static RX buffers reduced. At stock WiFi settings `esp_wifi_init()` fails with
-  `ESP_ERR_NO_MEM` and panics the board into a boot loop. The firmware logs free
-  internal heap at startup for exactly this reason; it currently reports about
-  220 KB free with a 116 KB largest block.
-- **The LVGL draw buffers must be in internal RAM, not PSRAM.** PSRAM buffers
-  fail two different ways: without `psram_dma_direct` on the panel IO, every
-  flush tries to allocate an internal bounce buffer and fails once WiFi is up
-  (`setup_dma_priv_buffer: Failed to allocate priv TX buffer`); with it, the DMA
-  reads PSRAM directly but cannot keep the SPI FIFO fed while WiFi is also using
-  PSRAM (`DMA TX underflow detected`). They are small on purpose --
-  `BSP_DISPLAY_LVGL_BUF_HEIGHT` trades directly against WiFi.
-- **Internal RAM runs out long before PSRAM does, and contiguity binds before
-  capacity.** Three P4 assumptions had to go: task stacks in PSRAM (see below),
-  `SPIRAM_MALLOC_ALWAYSINTERNAL=1024` (which forced the radar's hundreds of
-  ~300-byte LVGL objects into internal RAM, leaving ~15 KB free with PSRAM 85%
-  empty), and mbedTLS allocating internally. The last one mattered most for
-  stability: TLS handshakes fragment internal heap, and after a burst of them
-  the largest free block fell from 29 KB to 14 KB and never recovered, so the
-  aircraft fetch's own headroom check latched off and the radar stopped updating
-  until reboot -- with 34 KB still free. `MBEDTLS_EXTERNAL_MEM_ALLOC` plus
-  thresholds recalibrated in `RadarHttpClient.cpp` fixed it; the largest block
-  now holds steady around 30 KB.
-- **Task stacks must be in internal RAM** (`BOARD_TASK_STACK_CAPS`). Flash and
-  PSRAM share one cache on the S3, so a flash operation stops a PSRAM-stacked
-  task dead; IDF asserts on it. The P4 build puts every task stack in PSRAM,
-  which is safe there because flash and PSRAM have separate controllers.
-- **The FT3168 NAKs one status read about every 13.4 seconds**, on a cadence
-  steady to within 40 ms, which is its own periodic self-calibration and not a
-  bus problem. The driver drops that poll rather than reporting a fault, and
-  only warns after a run of consecutive failures.
-- **Physical controls have no default pins.** The ESP32-P4 defaults (GPIO 30/46/
-  47/52/48) are wrong here: 52 does not exist on an ESP32-S3, and 47/48 are the
-  I2C bus shared by touch, the IMU and the RTC.
+- **The panel has no memory of its own.** The S3's LCD peripheral reads the
+  whole frame out of PSRAM at the pixel clock without pause, so PSRAM
+  bandwidth is shared between the scanout, WiFi/LWIP buffers, LVGL's canvases
+  and, on this build, the code itself. If the scanout loses that contest the
+  picture shifts sideways or tears into noise. Everything below exists to keep
+  it from losing.
+- **Code and rodata run from PSRAM** (`CONFIG_SPIRAM_XIP_FROM_PSRAM`). The 1.43
+  build left this off to save PSRAM; here it is required. A flash write, which
+  includes every NVS save, normally disables the cache PSRAM is reached through,
+  and the scanout's bounce-buffer refill then faults
+  (`Cache disabled but cached memory region accessed`). With XIP on, IDF leaves
+  the cache enabled across flash operations. It costs about 2.9 MB of PSRAM, and
+  frees DIRAM: static use is 39% here against 44% on the 1.43.
+- **The pixel clock is 16 MHz, not the vendor demo's 30 MHz**
+  (`CONFIG_BSP_LCD_RGB_PCLK_MHZ`). 30 MHz runs the panel at ~107 Hz and
+  saturates PSRAM once network traffic starts. 16 MHz (~57 Hz) is what ran clean
+  on the capsule-radar port of this board; 18 MHz was marginal there.
+- **The scanout feeds from two internal-RAM bounce buffers**
+  (`CONFIG_BSP_LCD_RGB_BOUNCE_LINES`, 20 lines, 38.4 KB for the pair), and
+  `CONFIG_LCD_RGB_RESTART_IN_VSYNC` resyncs the DMA at the next frame after an
+  underrun, so a starved buffer costs one glitched frame rather than a
+  permanently shifted picture until reboot.
+- **`CONFIG_LCD_RGB_ISR_IRAM_SAFE` is off**, unlike the vendor demo. With XIP
+  the cache is never disabled, so it guards against nothing here, and it makes
+  the RGB driver reject the LVGL adapter's callbacks (their context is in
+  PSRAM), which hangs the display after its first frame.
+- **One frame buffer, no tear avoidance.** LVGL renders strips into internal RAM
+  and they are copied straight into the frame buffer being scanned. The
+  adapter's double- and triple-buffered modes would add whole-frame copies on
+  the same PSRAM bus. The expected cost is an occasional tear line through the
+  sweep.
+- **The ST7701 takes its init sequence over a 9-bit 3-wire SPI whose chip
+  select and reset are on the TCA9554 expander**, not on GPIOs, so the BSP
+  plays the sequence itself instead of using `esp_lcd_st7701`. The SPI bus is
+  released once the sequence is sent.
+- **The GT911's reset is on the expander too.** The BSP resets it with INT held
+  low, which latches I2C address `0x5d`, then hands it to the registry driver
+  with no reset or interrupt line; the adapter polls it.
+- **The buzzer is held off.** It sits on the expander, which powers up with
+  every output high. The BSP writes the output levels before switching the pins
+  to outputs, or the buzzer would sound at every boot.
+- **Internal RAM is still the scarce resource.** Everything the 1.43 build
+  learned applies: task stacks in internal RAM (`BOARD_TASK_STACK_CAPS`),
+  mbedTLS in PSRAM, WiFi's IRAM optimisations off, and
+  `SPIRAM_MALLOC_ALWAYSINTERNAL=128`. See the comments in `sdkconfig.defaults`.
+  On top of that the RGB bounce buffers take 38.4 KB that the QSPI panel never
+  needed. Check the free internal heap the firmware logs at startup on first
+  boot; the 1.43 reported about 220 KB free with a 116 KB largest block.
+- **Layout constants are the 1.43's.** 480 is 3% larger than 466, and those
+  numbers are set mostly by fingertip and legibility floors. Everything that
+  should track the panel (radar size, control arc radius) is derived from
+  `SCREEN_W`.
+- **LVGL is pinned to 9.5.0** in `main/idf_component.yml`, the release the
+  AMOLED build was brought up on. Otherwise any manifest change makes the
+  component manager move to the newest 9.x.
+- **Physical controls have no default pins.** Almost every GPIO is spent on the
+  RGB bus; see [Required Hardware](#required-hardware) for the ones to avoid.
 
 ## Useful Commands
 
@@ -584,8 +602,7 @@ Commit these files:
 - Source under `main/`
 - Data under `data/`
 - Generators under `tools/`
-- `components/bsp_extra/`
-- `components/waveshare__esp32_s3_touch_amoled_143/`
+- `components/waveshare__esp32_s3_touch_lcd_28c/`
 - `main/idf_component.yml`
 - `dependencies.lock`
 - `sdkconfig`
@@ -641,6 +658,13 @@ Runways are not displayed:
 - Confirm an AirportDB API token is saved in settings. Register at
   [airportdb.io](https://airportdb.io) if you do not have one.
 - Confirm runway drawing is enabled in settings.
+
+Picture shifts sideways, tears into noise, or rolls:
+
+- This is the RGB scanout running short of PSRAM bandwidth. Lower
+  `CONFIG_BSP_LCD_RGB_PCLK_MHZ` or raise `CONFIG_BSP_LCD_RGB_BOUNCE_LINES` (at
+  the cost of internal RAM) in `idf.py menuconfig`, under Board Support Package.
+- Heavy sweep settings add to the load; see the next item.
 
 Sweep animation is slow:
 

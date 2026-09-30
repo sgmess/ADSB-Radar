@@ -660,7 +660,7 @@ extern const char SETTINGS_PAGE_HTML[] = R"HTML(<!doctype html>
             <div class="col-12">
               <div class="dashboard-section">
                 <h2 class="h5 mb-2">GPS</h2>
-                <div class="alert alert-secondary mb-0">USB GPS is not available on the ESP32-S3-Touch-AMOLED-1.43: the board has no USB-A host port and no switchable VBUS, so a CDC GPS dongle cannot be powered or enumerated. Set the radar centre manually, by airport, or by place search.</div>
+                <div class="alert alert-secondary mb-0">USB GPS is not available on the ESP32-S3-Touch-LCD-2.8C: the board has no USB host port (its USB-C socket is a USB-to-serial bridge), so a CDC GPS dongle cannot be enumerated. Set the radar centre manually, by airport, or by place search.</div>
               </div>
             </div>
             <div class="col-12">
@@ -1144,7 +1144,7 @@ function renderHardwareControls(data){
       <div class="display-card">
         <div class="display-card-head"><div class="editor-card-icon"><i class="bi bi-aspect-ratio"></i></div><div><h3>Display Type</h3><p>The panel fitted to this board. There is nothing to choose: this firmware targets one display.</p></div></div>
         <div class="row g-3">
-          <div class="col-lg-6 col-md-8"><label class="form-label"><i class="bi bi-display"></i>LCD profile</label><input class="form-control" type="text" value="1.43-inch round AMOLED, 466 x 466 (CO5300)" readonly><div class="form-text">The radar layout is compiled for this panel, so no reboot prompt follows a save.</div></div>
+          <div class="col-lg-6 col-md-8"><label class="form-label"><i class="bi bi-display"></i>LCD profile</label><input class="form-control" type="text" value="2.8-inch round IPS LCD, 480 x 480 (ST7701)" readonly><div class="form-text">The radar layout is compiled for this panel, so no reboot prompt follows a save.</div></div>
         </div>
       </div>
     </div>

@@ -1,5 +1,5 @@
 # Espressif IoT Development Framework (ESP-IDF) project minimal configuration for the
-# Waveshare ESP32-S3-Touch-AMOLED-1.43 (ESP32-S3-PICO, 8 MB octal PSRAM, 16 MB flash).
+# Waveshare ESP32-S3-Touch-LCD-2.8C (ESP32-S3R8, 8 MB octal PSRAM, 16 MB flash).
 #
 CONFIG_IDF_TARGET="esp32s3"
 
@@ -26,9 +26,33 @@ CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y
 CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=128
 CONFIG_SPIRAM_MALLOC_RESERVE_INTERNAL=65536
 CONFIG_NVS_ALLOCATE_CACHE_IN_SPIRAM=y
-# Deliberately not setting SPIRAM_FETCH_INSTRUCTIONS / SPIRAM_RODATA. They would copy .text and
-# .rodata into PSRAM at boot, and this image is 2.7 MB of the two combined -- a third of the
-# 8 MB the canvases, LVGL buffers and HTTP buffers have to share.
+# Run code and read-only data from PSRAM. Required by the RGB panel, not a performance choice.
+# The panel has no memory of its own, so the LCD peripheral reads the frame out of PSRAM without
+# pause. Normally every flash write -- each NVS save counts -- disables the cache that PSRAM is
+# reached through, and the scanout's bounce-buffer refill then faults:
+#   "Cache disabled but cached memory region accessed"
+# With both of these on, IDF keeps the cache enabled across flash operations instead
+# (SPI_FLASH_CACHE_NO_DISABLE in spi_flash_os_func_app.c). The cost is PSRAM: .text and .rodata
+# are copied into it at boot, about 2.7 MB of the 8 MB. Waveshare's own demos for this board
+# enable the same pair.
+CONFIG_SPIRAM_XIP_FROM_PSRAM=y
+
+# RGB scanout robustness, as in the vendor demo and the capsule-radar port.
+# Deliberately NOT setting LCD_RGB_ISR_IRAM_SAFE, although the vendor demo does. The driver's
+# bounce-buffer fill and ISR are IRAM_ATTR regardless; the option only adds a guarantee that
+# they keep running while the cache is disabled, and XIP above means it never is. It also makes
+# esp_lcd_rgb_panel_register_event_callbacks() demand an internal-RAM user context, which the
+# LVGL adapter's (calloc'd, so in PSRAM under SPIRAM_MALLOC_ALWAYSINTERNAL=128) is not:
+#   lcd_panel.rgb: user context not in internal RAM
+# LVGL then never hears that a flush finished and the display hangs after its first frame.
+# CONFIG_LCD_RGB_ISR_IRAM_SAFE is not set
+# After an underrun the DMA restarts at the next VSYNC. Without this a single starved bounce
+# buffer leaves the picture permanently shifted until reboot; with it, one frame glitches.
+CONFIG_LCD_RGB_RESTART_IN_VSYNC=y
+# 64-byte data cache lines, from Waveshare's sdkconfig.defaults for this board. Doubles the burst
+# size of every PSRAM fill, which is what the bounce-buffer copy lives on.
+CONFIG_ESP32S3_DATA_CACHE_64KB=y
+CONFIG_ESP32S3_DATA_CACHE_LINE_64B=y
 
 # The S3 renders LVGL entirely in software, so the CPU clock is on the critical path for the
 # sweep redraw in a way it was not on the P4.
@@ -97,16 +121,19 @@ CONFIG_FREERTOS_HZ=1000
 CONFIG_FREERTOS_VTASKLIST_INCLUDE_COREID=y
 CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y
 
-# LVGL draw buffers, in display lines, each hor_res*lines*2 bytes and both in internal RAM.
-# Pinned here rather than left to the BSP's Kconfig default so it is visible next to the other
-# internal-RAM decisions it competes with -- WiFi's buffers and the TLS handshake.
+# LVGL draw buffers and RGB bounce buffers, in display lines, each 480*lines*2 bytes, two of each,
+# all in internal RAM. Pinned here rather than left to the BSP's Kconfig defaults so they are
+# visible next to the other internal-RAM decisions they compete with -- WiFi's buffers and the
+# TLS handshake. 12 + 20 lines is 23 KB + 38 KB.
 CONFIG_BSP_DISPLAY_LVGL_BUF_HEIGHT=12
+CONFIG_BSP_LCD_RGB_BOUNCE_LINES=20
+CONFIG_BSP_LCD_RGB_PCLK_MHZ=16
 
 CONFIG_LV_USE_CLIB_MALLOC=y
 CONFIG_LV_USE_CLIB_STRING=y
 CONFIG_LV_USE_CLIB_SPRINTF=y
 # 15 ms was the P4's refresh period. Software rendering on the S3 cannot sustain that over a
-# 466x466 frame, and asking for it only queues work; 30 ms leaves the sweep smooth without the
+# 480x480 frame, and asking for it only queues work; 30 ms leaves the sweep smooth without the
 # render task starving the fetch and TLS tasks.
 CONFIG_LV_DEF_REFR_PERIOD=30
 CONFIG_LV_OS_FREERTOS=y

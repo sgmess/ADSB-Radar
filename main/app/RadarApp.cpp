@@ -4627,7 +4627,7 @@ void RadarApp::create_radar_ui(void)
 
     /*
      * Place every bezel control from its arc angle rather than from a screen corner. The 720x720
-     * profile used hand-tuned x/y pairs, but at 466 the margins those encoded are smaller than
+     * profile used hand-tuned x/y pairs, but at 466-480 the margins those encoded are smaller than
      * the buttons' own rounded ends, so a corner-relative position runs off the panel. Deriving
      * from the arc also puts the hit target under the caption, which CurvedButtonController
      * draws at the same angle.
@@ -4771,9 +4771,11 @@ void RadarApp::run()
     cfg.lv_adapter_cfg = ESP_LV_ADAPTER_DEFAULT_CONFIG();
     cfg.rotation = ESP_LV_ADAPTER_ROTATE_0;
     /*
-     * The triple-partial mode needs the DSI panel's own frame buffers; this QSPI panel has no
-     * equivalent, so the adapter flushes directly and tearing is avoided by the CO5300's TE
-     * line instead.
+     * One PSRAM frame buffer, with LVGL's partial strips copied straight into it. The buffered
+     * modes would add a second or third frame buffer and a copy between them on every refresh,
+     * all on the PSRAM bus that the RGB scanout reads continuously. Starving that bus is what
+     * shifts the picture on this panel; an occasional tear line through the sweep is the lesser
+     * cost.
      */
     cfg.tear_avoid_mode = ESP_LV_ADAPTER_TEAR_AVOID_MODE_NONE;
     cfg.touch_flags.swap_xy = 0;
